@@ -169,6 +169,98 @@ export function parseXlsFile(data: ArrayBuffer): ParseResult {
       return { rows: [], errors: ['El archivo tiene encabezados válidos pero no contiene filas de datos'] };
     }
 
+
+  if (jsonData.length < 2) {
+    return { rows: [], errors: ['El archivo no contiene datos suficientes'] };
+  }
+
+  let headerRowIdx = -1;
+  let colGuide = -1;
+  let colRecipient = -1;
+  let colPhone = -1;
+  let colStatus = -1;
+
+  // Some SISCLINET exports include extra heading rows before actual headers.
+  for (let i = 0; i < Math.min(100, jsonData.length); i++) {
+    const row = jsonData[i] as string[];
+    if (!row || row.every(cell => !String(cell || '').trim())) continue;
+    const headers = row.map(String);
+    const gIdx = findColumn(headers, REQUIRED_COLUMNS.guideNumber);
+    const rIdx = findColumn(headers, REQUIRED_COLUMNS.recipient);
+    const pIdx = findColumn(headers, REQUIRED_COLUMNS.phone);
+
+    if (gIdx !== -1 && rIdx !== -1 && pIdx !== -1) {
+      headerRowIdx = i;
+      colGuide = gIdx;
+      colRecipient = rIdx;
+      colPhone = pIdx;
+      colStatus = findColumn(headers, REQUIRED_COLUMNS.status);
+      break;
+    }
+  }
+
+  if (headerRowIdx === -1) {
+    return { rows: [], errors: ['No se encontraron las columnas requeridas: Número de Guía, Destinatario, Número de Celular'] };
+  }
+
+  const dataRows = jsonData.slice(headerRowIdx + 1);
+  const rows: ParsedRow[] = [];
+
+  for (const row of dataRows) {
+    const r = row as string[];
+    const guideNumber = String(r[colGuide] || '').trim();
+    const recipient = String(r[colRecipient] || '').trim();
+    const phoneRaw = String(r[colPhone] || '').trim();
+    const status = colStatus !== -1 ? String(r[colStatus] || '').trim() : '';
+
+    if (!guideNumber && !recipient && !phoneRaw) continue;
+
+    const { valid, phone, reason } = normalizePhoneE164(phoneRaw);
+
+    rows.push({
+      guideNumber,
+      recipient,
+      phoneRaw,
+      phoneE164: phone,
+      phoneValid: valid,
+      phoneReason: reason,
+      status,
+    });
+  }
+
+  if (rows.length === 0) {
+    return { rows: [], errors: ['El archivo tiene encabezados válidos pero no contiene filas de datos'] };
+  }
+
+  return { rows, errors: [] };
+}
+
+export function parseXlsFile(data: ArrayBuffer): ParseResult {
+  try {
+    const workbook = XLSX.read(data, { type: 'array' });
+
+    if (!workbook.SheetNames.length) {
+      return { rows: [], errors: ['El archivo no contiene hojas de cálculo'] };
+    }
+
+    let sawRequiredHeaders = false;
+    for (const sheetName of workbook.SheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      const result = parseSheet(sheet);
+
+      if (result.errors.length === 0) {
+        return result;
+      }
+
+      if (!result.errors.includes('No se encontraron las columnas requeridas: Número de Guía, Destinatario, Número de Celular')) {
+        sawRequiredHeaders = true;
+      }
+    }
+
+    if (sawRequiredHeaders) {
+      return { rows: [], errors: ['El archivo tiene encabezados válidos pero no contiene filas de datos'] };
+    }
+
     return { rows: [], errors: ['No se encontraron las columnas requeridas: Número de Guía, Destinatario, Número de Celular'] };
   } catch (e) {
     return { rows: [], errors: [`Error al parsear el archivo: ${(e as Error).message}`] };

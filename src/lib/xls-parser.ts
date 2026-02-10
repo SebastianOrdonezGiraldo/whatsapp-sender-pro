@@ -23,30 +23,47 @@ const REQUIRED_COLUMNS = {
   status: ['estado'],
 };
 
+function normalizeHeader(value: string): string {
+  return value
+    .toString()
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
 function findColumn(headers: string[], candidates: string[]): number {
-  const normalized = headers.map(h => h?.toString().toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '') || '');
-  for (const candidate of candidates) {
-    const normCandidate = candidate.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const idx = normalized.findIndex(h => h.includes(normCandidate));
-    if (idx !== -1) return idx;
+  const normalizedHeaders = headers.map(h => normalizeHeader(h || ''));
+  const normalizedCandidates = candidates.map(c => normalizeHeader(c));
+
+  for (const candidate of normalizedCandidates) {
+    const exactIdx = normalizedHeaders.findIndex(h => h === candidate);
+    if (exactIdx !== -1) return exactIdx;
   }
+
+  for (const candidate of normalizedCandidates) {
+    const includesIdx = normalizedHeaders.findIndex(h => h.includes(candidate));
+    if (includesIdx !== -1) return includesIdx;
+  }
+
   return -1;
 }
 
-function parseSheet(sheet: XLSX.WorkSheet): { rows: ParsedRow[]; hasHeader: boolean } {
+function parseSheet(sheet: XLSX.WorkSheet): ParseResult {
   const jsonData = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '' });
-  if (jsonData.length === 0) {
-    return { rows: [], hasHeader: false };
+
+  if (jsonData.length < 2) {
+    return { rows: [], errors: ['El archivo no contiene datos suficientes'] };
   }
 
-  // Find header row (first row with recognizable columns)
   let headerRowIdx = -1;
   let colGuide = -1;
   let colRecipient = -1;
   let colPhone = -1;
   let colStatus = -1;
 
-  for (let i = 0; i < Math.min(20, jsonData.length); i++) {
+  for (let i = 0; i < Math.min(30, jsonData.length); i++) {
     const row = jsonData[i] as string[];
     const headers = row.map(String);
     const gIdx = findColumn(headers, REQUIRED_COLUMNS.guideNumber);
@@ -64,7 +81,7 @@ function parseSheet(sheet: XLSX.WorkSheet): { rows: ParsedRow[]; hasHeader: bool
   }
 
   if (headerRowIdx === -1) {
-    return { rows: [], hasHeader: false };
+    return { rows: [], errors: ['No se encontraron las columnas requeridas: Número de Guía, Destinatario, Número de Celular'] };
   }
 
   const dataRows = jsonData.slice(headerRowIdx + 1);
@@ -77,7 +94,7 @@ function parseSheet(sheet: XLSX.WorkSheet): { rows: ParsedRow[]; hasHeader: bool
     const phoneRaw = String(r[colPhone] || '').trim();
     const status = colStatus !== -1 ? String(r[colStatus] || '').trim() : '';
 
-    if (!guideNumber && !recipient && !phoneRaw) continue; // skip empty rows
+    if (!guideNumber && !recipient && !phoneRaw) continue;
 
     const { valid, phone, reason } = normalizePhoneE164(phoneRaw);
 
@@ -89,6 +106,31 @@ function parseSheet(sheet: XLSX.WorkSheet): { rows: ParsedRow[]; hasHeader: bool
       phoneValid: valid,
       phoneReason: reason,
       status,
+    });
+  }
+
+  if (rows.length === 0) {
+    return { rows: [], errors: ['El archivo tiene encabezados válidos pero no contiene filas de datos'] };
+  }
+
+  return { rows, errors: [] };
+}
+export function parseXlsFile(data: ArrayBuffer): ParseResult {
+
+    if (!workbook.SheetNames.length) {
+    let sawRequiredHeaders = false;
+    for (const sheetName of workbook.SheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      const result = parseSheet(sheet);
+      if (result.errors.length === 0) {
+        return result;
+
+      if (!result.errors.includes('No se encontraron las columnas requeridas: Número de Guía, Destinatario, Número de Celular')) {
+        sawRequiredHeaders = true;
+      }
+    if (sawRequiredHeaders) {
+      return { rows: [], errors: ['El archivo tiene encabezados válidos pero no contiene filas de datos'] };
+    return { rows: [], errors: ['No se encontraron las columnas requeridas: Número de Guía, Destinatario, Número de Celular'] };
     });
   }
 

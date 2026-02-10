@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, CheckCircle2, XCircle, Copy, Loader2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/integrations/supabase/client';
 import type { ParsedRow } from '@/lib/xls-parser';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
+import { WA_RUNTIME_CONFIG } from '@/config/whatsapp';
+import { delay, sendWhatsAppMessage } from '@/lib/whatsapp-api';
+import { getSentMessageKeySet, saveJobWithMessages, type LocalJob, type LocalMessage } from '@/lib/local-history';
 
 type RowCategory = 'valid' | 'invalid' | 'duplicate';
 
@@ -35,51 +37,28 @@ export default function PreviewPage() {
     }
 
     const parsedRows: ParsedRow[] = JSON.parse(raw);
-    checkDuplicates(parsedRows);
+    categorizeRows(parsedRows);
   }, [navigate]);
 
-  async function checkDuplicates(parsedRows: ParsedRow[]) {
-    try {
-      // Get existing sent messages to check duplicates
-      const validPhones = parsedRows
-        .filter(r => r.phoneValid)
-        .map(r => r.phoneE164);
+  function categorizeRows(parsedRows: ParsedRow[]) {
+    const existingSet = getSentMessageKeySet();
 
-      const { data: existing } = await supabase
-        .from('sent_messages')
-        .select('phone_e164, guide_number')
-        .in('phone_e164', validPhones.length > 0 ? validPhones : ['__none__']);
+    const categorized: CategorizedRow[] = parsedRows.map(row => {
+      if (!row.phoneValid || !row.guideNumber || !row.recipient) {
+        return { ...row, category: 'invalid' as const };
+      }
+      if (row.status && row.status.toLowerCase() !== ALLOWED_STATUS.toLowerCase()) {
+        return { ...row, category: 'invalid' as const, phoneReason: `Estado "${row.status}" no es "${ALLOWED_STATUS}"` };
+      }
+      const key = `${row.phoneE164}|${row.guideNumber}`;
+      if (existingSet.has(key)) {
+        return { ...row, category: 'duplicate' as const };
+      }
+      return { ...row, category: 'valid' as const };
+    });
 
-      const existingSet = new Set(
-        (existing || []).map(e => `${e.phone_e164}|${e.guide_number}`)
-      );
-
-      const categorized: CategorizedRow[] = parsedRows.map(row => {
-        if (!row.phoneValid || !row.guideNumber || !row.recipient) {
-          return { ...row, category: 'invalid' as const };
-        }
-        if (row.status && row.status.toLowerCase() !== ALLOWED_STATUS.toLowerCase()) {
-          return { ...row, category: 'invalid' as const, phoneReason: `Estado "${row.status}" no es "${ALLOWED_STATUS}"` };
-        }
-        const key = `${row.phoneE164}|${row.guideNumber}`;
-        if (existingSet.has(key)) {
-          return { ...row, category: 'duplicate' as const };
-        }
-        return { ...row, category: 'valid' as const };
-      });
-
-      setRows(categorized);
-    } catch (err) {
-      console.error('Error checking duplicates:', err);
-      // Categorize without duplicate check
-      const categorized: CategorizedRow[] = parsedRows.map(row => ({
-        ...row,
-        category: row.phoneValid && row.guideNumber && row.recipient ? 'valid' : 'invalid',
-      }));
-      setRows(categorized);
-    } finally {
-      setLoading(false);
-    }
+    setRows(categorized);
+    setLoading(false);
   }
 
   const counts = useMemo(() => ({
@@ -90,51 +69,79 @@ export default function PreviewPage() {
   }), [rows]);
 
   const filteredRows = activeTab === 'all' ? rows : rows.filter(r => r.category === activeTab);
+  const sendableCount = counts.valid + counts.duplicate;
 
   async function handleSend() {
-    const validRows = rows.filter(r => r.category === 'valid');
-    if (validRows.length === 0) {
+    const sendableRows = rows.filter(r => r.category === 'valid' || r.category === 'duplicate');
+    if (sendableRows.length === 0) {
       toast.error('No hay filas válidas para enviar');
+      return;
+    }
+
+    if (!WA_RUNTIME_CONFIG.token || !WA_RUNTIME_CONFIG.phoneNumberId) {
+      toast.error('Faltan credenciales locales en src/config/whatsapp.ts');
       return;
     }
 
     setSending(true);
 
     try {
-      // Create job
-      const { data: job, error: jobError } = await supabase
-        .from('jobs')
-        .insert({
-          source_filename: filename,
-          total_rows: counts.total,
-          valid_rows: counts.valid,
-          invalid_rows: counts.invalid,
-          duplicate_rows: counts.duplicate,
-          status: 'PROCESSING',
-        })
-        .select()
-        .single();
+      const jobId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      let sentOk = 0;
+      let sentFailed = 0;
 
-      if (jobError || !job) throw new Error(jobError?.message || 'Error creando job');
+      const messages: LocalMessage[] = [];
 
-      // Call edge function to send messages
-      const { data, error } = await supabase.functions.invoke('send-whatsapp', {
-        body: {
-          jobId: job.id,
-          rows: validRows.map(r => ({
-            phone_e164: r.phoneE164,
-            guide_number: r.guideNumber,
-            recipient_name: r.recipient,
-          })),
-        },
-      });
+      for (const row of sendableRows) {
+        const result = await sendWhatsAppMessage({
+          phoneE164: row.phoneE164,
+          guideNumber: row.guideNumber,
+          recipientName: row.recipient,
+        });
 
-      if (error) throw error;
+        if (result.ok) {
+          sentOk++;
+        } else {
+          sentFailed++;
+        }
 
-      toast.success(`Envío completado: ${data?.sent_ok || 0} enviados, ${data?.sent_failed || 0} fallidos`);
+        messages.push({
+          id: crypto.randomUUID(),
+          job_id: jobId,
+          phone_e164: row.phoneE164,
+          guide_number: row.guideNumber,
+          recipient_name: row.recipient,
+          status: result.ok ? 'SENT' : 'FAILED',
+          error_message: result.errorMessage,
+          wa_message_id: result.waMessageId,
+          created_at: new Date().toISOString(),
+        });
+
+        if (WA_RUNTIME_CONFIG.sendDelayMs > 0) {
+          await delay(WA_RUNTIME_CONFIG.sendDelayMs);
+        }
+      }
+
+      const job: LocalJob = {
+        id: jobId,
+        source_filename: filename,
+        total_rows: counts.total,
+        valid_rows: counts.valid,
+        invalid_rows: counts.invalid,
+        duplicate_rows: counts.duplicate,
+        sent_ok: sentOk,
+        sent_failed: sentFailed,
+        status: sentFailed > 0 && sentOk === 0 ? 'FAILED' : 'COMPLETED',
+        created_at: now,
+      };
+
+      saveJobWithMessages(job, messages);
+
+      toast.success(`Envío completado: ${sentOk} enviados, ${sentFailed} fallidos`);
       sessionStorage.removeItem('wa-preview-data');
       sessionStorage.removeItem('wa-preview-filename');
-      navigate(`/history/${job.id}`);
+      navigate(`/history/${jobId}`);
     } catch (err) {
       toast.error(`Error: ${(err as Error).message}`);
     } finally {
@@ -159,7 +166,6 @@ export default function PreviewPage() {
 
   return (
     <div>
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
@@ -172,18 +178,17 @@ export default function PreviewPage() {
         </div>
         <Button
           onClick={handleSend}
-          disabled={counts.valid === 0 || sending}
+          disabled={sendableCount === 0 || sending}
           className="h-11 px-6 font-display"
         >
           {sending ? (
             <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Enviando...</>
           ) : (
-            <><Send className="w-4 h-4 mr-2" /> Enviar WhatsApp ({counts.valid})</>
+            <><Send className="w-4 h-4 mr-2" /> Enviar WhatsApp ({sendableCount})</>
           )}
         </Button>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {tabs.map(tab => (
           <button
@@ -199,7 +204,6 @@ export default function PreviewPage() {
         ))}
       </div>
 
-      {/* Table */}
       <div className="glass-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -243,7 +247,7 @@ export default function PreviewPage() {
                   <td className="p-3 font-mono text-xs">{row.guideNumber || '—'}</td>
                   <td className="p-3 text-xs text-muted-foreground">
                     {row.category === 'invalid' && (row.phoneReason || 'Datos incompletos')}
-                    {row.category === 'duplicate' && 'Ya enviado previamente'}
+                    {row.category === 'duplicate' && 'Ya enviado previamente (se reenviará)'}
                   </td>
                 </motion.tr>
               ))}

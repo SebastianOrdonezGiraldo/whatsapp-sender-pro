@@ -2,36 +2,16 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Clock, FileSpreadsheet, ChevronRight, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/integrations/supabase/client';
 import { motion } from 'framer-motion';
-
-interface Job {
-  id: string;
-  source_filename: string;
-  total_rows: number;
-  valid_rows: number;
-  sent_ok: number;
-  sent_failed: number;
-  duplicate_rows: number;
-  status: string;
-  created_at: string;
-}
+import { getJobs, type LocalJob } from '@/lib/local-history';
 
 export default function HistoryPage() {
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<LocalJob[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchJobs() {
-      const { data } = await supabase
-        .from('jobs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50);
-      setJobs((data as Job[]) || []);
-      setLoading(false);
-    }
-    fetchJobs();
+    setJobs(getJobs());
+    setLoading(false);
   }, []);
 
   if (loading) {
@@ -46,7 +26,7 @@ export default function HistoryPage() {
     <div>
       <div className="mb-8">
         <h2 className="text-2xl font-bold font-display">Historial de Envíos</h2>
-        <p className="text-muted-foreground mt-1">Todos los jobs procesados</p>
+        <p className="text-muted-foreground mt-1">Jobs guardados localmente en este navegador</p>
       </div>
 
       {jobs.length === 0 ? (

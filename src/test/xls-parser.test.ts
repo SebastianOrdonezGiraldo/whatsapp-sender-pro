@@ -82,4 +82,33 @@ describe('parseXlsFile', () => {
     expect(result.rows[0].recipient).toBe('Cliente Uno');
     expect(result.rows[0].phoneRaw).toBe('3207654321');
   });
+
+  it('si encuentra un encabezado sin datos, sigue buscando otro encabezado válido en la misma hoja', () => {
+    const workbook = XLSX.utils.book_new();
+
+    const headerOnlySection = [
+      ['Número de Guía', 'Destinatario', 'Número de Celular', 'Estado'],
+      ['', '', '', ''],
+      ['', '', '', ''],
+    ];
+
+    const realSection = [
+      ['Estado', 'Número de Guía', 'Destinatario', 'Número de Celular'],
+      ['Impreso', 'G-ABC', 'Cliente Real', '3201112233'],
+    ];
+
+    const sheet = XLSX.utils.aoa_to_sheet([...headerOnlySection, [''], ...realSection]);
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Reporte');
+
+    const result = parseXlsFile(toArrayBuffer(workbook));
+
+    expect(result.errors).toEqual([]);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({
+      guideNumber: 'G-ABC',
+      recipient: 'Cliente Real',
+      phoneRaw: '3201112233',
+    });
+  });
+
 });

@@ -1,3 +1,5 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck - This is a Deno edge function, not a Node.js file
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -34,7 +36,7 @@ serve(async (req) => {
     const waTemplateLang = Deno.env.get("WA_TEMPLATE_LANG") || "es_CO";
     const waGraphVersion = Deno.env.get("WA_GRAPH_VERSION") || "v19.0";
     const senderName = Deno.env.get("SENDER_NAME") || "Import Corporal Medical";
-    const sleepMs = parseInt(Deno.env.get("SEND_DELAY_MS") || "500");
+    const sleepMs = Number.parseInt(Deno.env.get("SEND_DELAY_MS") || "500");
 
     const { jobId, rows, waToken: waTokenFromBody, waPhoneNumberId: waPhoneIdFromBody } = await req.json() as SendRequestBody;
 

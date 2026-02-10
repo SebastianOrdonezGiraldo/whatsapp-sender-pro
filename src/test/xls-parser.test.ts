@@ -46,6 +46,26 @@ describe('parseXlsFile', () => {
     });
   });
 
+  it('encuentra encabezados aunque aparezcan después de muchas filas introductorias', () => {
+    const preRows = Array.from({ length: 45 }, (_, i) => [`Texto previo ${i + 1}`]);
+    const headers = ['Número de Guía', 'Destinatario', 'Número de Celular', 'Estado'];
+    const data = [['G-999', 'Cliente Largo', '3101234567', 'Impreso']];
+
+    const workbook = XLSX.utils.book_new();
+    const sheet = XLSX.utils.aoa_to_sheet([...preRows, headers, ...data]);
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Hoja Larga');
+
+    const result = parseXlsFile(toArrayBuffer(workbook));
+
+    expect(result.errors).toEqual([]);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({
+      guideNumber: 'G-999',
+      recipient: 'Cliente Largo',
+      phoneRaw: '3101234567',
+    });
+  });
+
   it('si la primera hoja no sirve, usa otra hoja válida', () => {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['sin datos']]), 'Hoja1');

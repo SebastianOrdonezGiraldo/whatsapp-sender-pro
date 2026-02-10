@@ -13,6 +13,13 @@ interface MessageRow {
   recipient_name: string;
 }
 
+interface SendRequestBody {
+  jobId: string;
+  rows: MessageRow[];
+  waToken?: string;
+  waPhoneNumberId?: string;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -23,15 +30,16 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const waToken = Deno.env.get("WA_TOKEN");
-    const waPhoneId = Deno.env.get("WA_PHONE_NUMBER_ID");
     const waTemplateName = Deno.env.get("WA_TEMPLATE_NAME") || "shipment_notification";
     const waTemplateLang = Deno.env.get("WA_TEMPLATE_LANG") || "es_CO";
     const waGraphVersion = Deno.env.get("WA_GRAPH_VERSION") || "v19.0";
     const senderName = Deno.env.get("SENDER_NAME") || "Import Corporal Medical";
     const sleepMs = parseInt(Deno.env.get("SEND_DELAY_MS") || "500");
 
-    const { jobId, rows } = await req.json() as { jobId: string; rows: MessageRow[] };
+    const { jobId, rows, waToken: waTokenFromBody, waPhoneNumberId: waPhoneIdFromBody } = await req.json() as SendRequestBody;
+
+    const waToken = waTokenFromBody || Deno.env.get("WA_TOKEN");
+    const waPhoneId = waPhoneIdFromBody || Deno.env.get("WA_PHONE_NUMBER_ID");
 
     if (!jobId || !rows?.length) {
       return new Response(

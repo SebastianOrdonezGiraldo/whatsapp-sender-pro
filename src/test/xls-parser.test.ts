@@ -1,50 +1,65 @@
-import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
+import { describe, expect, it } from 'vitest';
 import { parseXlsFile } from '@/lib/xls-parser';
 
-function workbookToArrayBuffer(workbook: XLSX.WorkBook): ArrayBuffer {
-  const output = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+function toArrayBuffer(workbook: XLSX.WorkBook): ArrayBuffer {
+  const output = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
   return output as ArrayBuffer;
 }
 
 describe('parseXlsFile', () => {
-  it('parses rows from a valid sheet', () => {
-    const wb = XLSX.utils.book_new();
-    const sheet = XLSX.utils.aoa_to_sheet([
-      ['Número de Guía', 'Destinatario', 'Número de Celular', 'Estado'],
-      ['G-100', 'María', '3001234567', 'Impreso'],
-    ]);
-    XLSX.utils.book_append_sheet(wb, sheet, 'Reporte');
+  it('extrae solo columnas requeridas aunque existan muchas columnas', () => {
+    const headers = [
+      'Estado',
+      'Causal Anulación Masiva',
+      'Número de Guia',
+      'Fecha de Envio',
+      'Destinatario',
+      'Teléfono',
+      'Número de Celular',
+      'Ciudad',
+      'Departamento Destino',
+    ];
 
-    const result = parseXlsFile(workbookToArrayBuffer(wb));
+    const data = [
+      ['Impreso', '', 'G-001', '2026-02-10', 'Juan Perez', '1111111', '3201234567', 'Bogotá', 'Cundinamarca'],
+      ['Impreso', '', 'G-002', '2026-02-10', 'Ana Ruiz', '2222222', '3009876543', 'Medellín', 'Antioquia'],
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    const sheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Reporte');
+
+    const result = parseXlsFile(toArrayBuffer(workbook));
 
     expect(result.errors).toEqual([]);
-    expect(result.rows).toHaveLength(1);
+    expect(result.rows).toHaveLength(2);
     expect(result.rows[0]).toMatchObject({
-      guideNumber: 'G-100',
-      recipient: 'María',
-      phoneE164: '+573001234567',
-      phoneValid: true,
-      status: 'Impreso',
+      guideNumber: 'G-001',
+      recipient: 'Juan Perez',
+      phoneRaw: '3201234567',
+    });
+    expect(result.rows[1]).toMatchObject({
+      guideNumber: 'G-002',
+      recipient: 'Ana Ruiz',
+      phoneRaw: '3009876543',
     });
   });
 
-  it('falls back to another sheet when first sheet is empty', () => {
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([]), 'Empty');
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.aoa_to_sheet([
-        ['Número de Guía', 'Destinatario', 'Número de Celular'],
-        ['G-200', 'Carlos', '573001112233'],
-      ]),
-      'Datos',
-    );
+  it('si la primera hoja no sirve, usa otra hoja válida', () => {
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['sin datos']]), 'Hoja1');
 
-    const result = parseXlsFile(workbookToArrayBuffer(wb));
+    const headers = ['Número de Guía', 'Destinatario', 'Número de Celular', 'Estado'];
+    const data = [['G-777', 'Cliente Uno', '3207654321', 'Impreso']];
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([headers, ...data]), 'Hoja2');
+
+    const result = parseXlsFile(toArrayBuffer(workbook));
 
     expect(result.errors).toEqual([]);
     expect(result.rows).toHaveLength(1);
-    expect(result.rows[0].guideNumber).toBe('G-200');
+    expect(result.rows[0].guideNumber).toBe('G-777');
+    expect(result.rows[0].recipient).toBe('Cliente Uno');
+    expect(result.rows[0].phoneRaw).toBe('3207654321');
   });
 });

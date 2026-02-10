@@ -103,10 +103,17 @@ export default function PreviewPage() {
     setSending(true);
 
     try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('Usuario no autenticado');
+      }
+
       // Create job
       const { data: job, error: jobError } = await supabase
         .from('jobs')
         .insert({
+          user_id: user.id,
           source_filename: filename,
           total_rows: counts.total,
           valid_rows: counts.valid,

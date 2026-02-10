@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { ParsedRow } from '@/lib/xls-parser';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
+import { WA_RUNTIME_CONFIG } from '@/config/whatsapp';
 
 type RowCategory = 'valid' | 'invalid' | 'duplicate';
 
@@ -121,6 +122,8 @@ export default function PreviewPage() {
       const { data, error } = await supabase.functions.invoke('send-whatsapp', {
         body: {
           jobId: job.id,
+          waToken: WA_RUNTIME_CONFIG.token || undefined,
+          waPhoneNumberId: WA_RUNTIME_CONFIG.phoneNumberId || undefined,
           rows: validRows.map(r => ({
             phone_e164: r.phoneE164,
             guide_number: r.guideNumber,

@@ -112,7 +112,7 @@ export default function PreviewPage() {
           duplicate_rows: counts.duplicate,
           status: 'PROCESSING',
         })
-        .select()
+        .select('id')
         .single();
 
       if (jobError || !job) throw new Error(jobError?.message || 'Error creando job');

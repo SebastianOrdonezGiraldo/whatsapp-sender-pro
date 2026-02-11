@@ -72,9 +72,9 @@ async function sendWhatsAppMessage(
     const url = `https://graph.facebook.com/${waGraphVersion}/${waPhoneId}/messages`;
     
     // Template structure for Import Corporal Medical:
-    // Body: {{1}} = Nombre destinatario, {{2}} = Transportadora, {{3}} = Número guía, {{4}} = Estado
+    // Body: {{1}} = Nombre destinatario, {{2}} = Número de guía, {{3}} = Estado de envío
     // Button: Static URL (no variables)
-    const carrierDisplayName = carrierInfo?.displayName || "Servientrega";
+    // Note: Transportadora is hardcoded in each template text, not a variable
     
     const body = {
       messaging_product: "whatsapp",
@@ -88,9 +88,8 @@ async function sendWhatsAppMessage(
             type: "body",
             parameters: [
               { type: "text", text: message.recipient_name }, // {{1}} Nombre del destinatario
-              { type: "text", text: carrierDisplayName }, // {{2}} Transportadora
-              { type: "text", text: cleanGuideNumber }, // {{3}} Número de guía
-              { type: "text", text: "En tránsito" }, // {{4}} Estado del envío
+              { type: "text", text: cleanGuideNumber }, // {{2}} Número de guía
+              { type: "text", text: "En tránsito" }, // {{3}} Estado de envío
             ],
           },
         ],

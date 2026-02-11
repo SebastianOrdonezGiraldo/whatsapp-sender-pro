@@ -30,7 +30,7 @@ const App = () => (
             element={
               <Layout>
                 <Routes>
-                  <Route path="/" element={<Navigate to="/login" replace />} />
+                  <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
                   <Route path="/preview" element={<ProtectedRoute><Preview /></ProtectedRoute>} />
                   <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
                   <Route path="/history/:jobId" element={<ProtectedRoute><JobDetail /></ProtectedRoute>} />

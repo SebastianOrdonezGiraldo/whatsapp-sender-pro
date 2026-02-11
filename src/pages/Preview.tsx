@@ -67,7 +67,7 @@ async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
   return fallbackData;
 }
 
-const ALLOWED_STATUS = 'Impreso';
+// const ALLOWED_STATUS = 'Impreso'; // DISABLED: Now accepts any status
 
 export default function PreviewPage() {
   const navigate = useNavigate();
@@ -111,9 +111,10 @@ export default function PreviewPage() {
         if (!row.phoneValid || !row.guideNumber || !row.recipient) {
           return { ...row, category: 'invalid' as const };
         }
-        if (row.status && row.status.toLowerCase() !== ALLOWED_STATUS.toLowerCase()) {
-          return { ...row, category: 'invalid' as const, phoneReason: `Estado "${row.status}" no es "${ALLOWED_STATUS}"` };
-        }
+        // Status validation DISABLED - now accepts any status
+        // if (row.status && row.status.toLowerCase() !== ALLOWED_STATUS.toLowerCase()) {
+        //   return { ...row, category: 'invalid' as const, phoneReason: `Estado "${row.status}" no es "${ALLOWED_STATUS}"` };
+        // }
         const key = `${row.phoneE164}|${row.guideNumber}`;
         if (existingSet.has(key)) {
           return { ...row, category: 'duplicate' as const };

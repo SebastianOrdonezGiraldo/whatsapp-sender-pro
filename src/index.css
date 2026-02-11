@@ -15,22 +15,25 @@
     --popover: 0 0% 100%;
     --popover-foreground: 215 25% 12%;
 
-    --primary: 210 90% 35%;
+    /* Import Corporal Medical - Primary: #17A4B0 (Turquesa) */
+    --primary: 184 77% 39%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 175 50% 40%;
+    /* Import Corporal Medical - Secondary: #78B52C (Verde Lima) */
+    --secondary: 87 61% 44%;
     --secondary-foreground: 0 0% 100%;
 
     --muted: 210 15% 93%;
     --muted-foreground: 215 12% 50%;
 
-    --accent: 175 50% 40%;
+    --accent: 184 77% 39%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 152 60% 38%;
+    /* Success usa el verde de la marca */
+    --success: 87 61% 44%;
     --success-foreground: 0 0% 100%;
 
     --warning: 38 92% 50%;
@@ -38,18 +41,18 @@
 
     --border: 214 20% 88%;
     --input: 214 20% 88%;
-    --ring: 210 90% 35%;
+    --ring: 184 77% 39%;
 
     --radius: 0.75rem;
 
     --sidebar-background: 215 25% 12%;
     --sidebar-foreground: 210 15% 85%;
-    --sidebar-primary: 210 90% 55%;
+    --sidebar-primary: 184 77% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 215 20% 18%;
     --sidebar-accent-foreground: 210 15% 85%;
     --sidebar-border: 215 20% 22%;
-    --sidebar-ring: 210 90% 55%;
+    --sidebar-ring: 184 77% 50%;
 
     --font-display: 'Space Grotesk', sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
@@ -62,23 +65,26 @@
     --card-foreground: 210 15% 93%;
     --popover: 215 25% 12%;
     --popover-foreground: 210 15% 93%;
-    --primary: 210 90% 55%;
+    /* Import Corporal Medical - Primary: #17A4B0 (Turquesa) - Más brillante en dark */
+    --primary: 184 77% 50%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 175 50% 45%;
+    /* Import Corporal Medical - Secondary: #78B52C (Verde Lima) - Más brillante en dark */
+    --secondary: 87 61% 52%;
     --secondary-foreground: 0 0% 100%;
     --muted: 215 20% 18%;
     --muted-foreground: 215 12% 55%;
-    --accent: 175 50% 45%;
+    --accent: 184 77% 50%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 62% 45%;
     --destructive-foreground: 0 0% 100%;
-    --success: 152 60% 45%;
+    /* Success usa el verde de la marca */
+    --success: 87 61% 52%;
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 55%;
     --warning-foreground: 0 0% 10%;
     --border: 215 20% 22%;
     --input: 215 20% 22%;
-    --ring: 210 90% 55%;
+    --ring: 184 77% 50%;
   }
 }
 

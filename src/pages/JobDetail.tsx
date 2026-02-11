@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, CheckCircle2, XCircle, MinusCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle2, XCircle, MinusCircle, RefreshCw, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { motion } from 'framer-motion';
 import QueueMonitor from '@/components/QueueMonitor';
+import { toast } from 'sonner';
 
 interface Job {
   id: string;
@@ -56,6 +57,7 @@ export default function JobDetailPage() {
   const [queueMessages, setQueueMessages] = useState<QueueMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   const fetchData = async () => {
     const [jobRes, msgRes, queueRes] = await Promise.all([
@@ -86,6 +88,63 @@ export default function JobDetailPage() {
   const handleRefresh = () => {
     setRefreshing(true);
     fetchData();
+  };
+
+  const handleRetryFailed = async () => {
+    setRetrying(true);
+    try {
+      // Get failed messages from queue
+      const { data: failedMessages, error: fetchError } = await supabase
+        .from('message_queue')
+        .select('id')
+        .eq('job_id', jobId!)
+        .eq('status', 'FAILED');
+
+      if (fetchError) throw fetchError;
+
+      if (!failedMessages || failedMessages.length === 0) {
+        toast.info('No hay mensajes fallidos para reintentar');
+        setRetrying(false);
+        return;
+      }
+
+      // Reset failed messages to PENDING status and reset retry count
+      const { error: updateError } = await supabase
+        .from('message_queue')
+        .update({
+          status: 'PENDING',
+          retry_count: 0,
+          next_retry_at: null,
+          error_message: null,
+          error_code: null,
+        })
+        .eq('job_id', jobId!)
+        .eq('status', 'FAILED');
+
+      if (updateError) throw updateError;
+
+      toast.success(`Reintentando ${failedMessages.length} mensaje(s) fallido(s)...`);
+
+      // Trigger processing
+      const { error: processError } = await supabase.functions.invoke('process-message-queue', {
+        body: { jobId },
+      });
+
+      if (processError) {
+        console.error('Error al procesar cola:', processError);
+        toast.warning('Mensajes marcados para reintento. Procesamiento iniciado.');
+      } else {
+        toast.success('Procesamiento de reintentos iniciado');
+      }
+
+      // Refresh data
+      await fetchData();
+    } catch (error) {
+      console.error('Error al reintentar:', error);
+      toast.error(`Error: ${(error as Error).message}`);
+    } finally {
+      setRetrying(false);
+    }
   };
 
   if (loading) {
@@ -131,15 +190,37 @@ export default function JobDetailPage() {
             </p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRefresh}
-          disabled={refreshing}
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-          Actualizar
-        </Button>
+        <div className="flex items-center gap-2">
+          {job.sent_failed > 0 && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleRetryFailed}
+              disabled={retrying}
+            >
+              {retrying ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Reintentando...
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  Reintentar Fallidos ({job.sent_failed})
+                </>
+              )}
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={refreshing}
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Actualizar
+          </Button>
+        </div>
       </div>
 
       {/* Queue Monitor */}

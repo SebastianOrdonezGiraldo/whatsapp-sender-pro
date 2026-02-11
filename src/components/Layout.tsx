@@ -61,8 +61,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <MessageSquare className="w-5 h-5 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-lg font-bold font-display leading-tight">WA Notify</h1>
-                <p className="text-xs text-muted-foreground leading-none">Servientrega → WhatsApp</p>
+                <h1 className="text-lg font-bold font-display leading-tight">Import Corporal Medical</h1>
+                <p className="text-xs text-muted-foreground leading-none">Notificaciones de Envíos</p>
               </div>
             </Link>
 

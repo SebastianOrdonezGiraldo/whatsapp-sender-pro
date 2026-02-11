@@ -27,7 +27,7 @@ interface SendWhatsAppPayload {
 }
 
 async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
-  // ✅ Primero intenta con supabase.functions.invoke (incluye JWT automáticamente)
+  // Primero intenta con supabase.functions.invoke
   const invokeResult = await supabase.functions.invoke('enqueue-messages', { 
     body: payload
   });
@@ -36,26 +36,33 @@ async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
     return invokeResult.data;
   }
 
-  // ✅ Si falla, usa fetch directo CON el JWT del usuario
+  // Si falla, intenta con fetch directo usando el JWT del usuario
+  const errorMessage = invokeResult.error.message || '';
+  const isTransportError = errorMessage.toLowerCase().includes('failed to send a request');
+
+  if (!isTransportError) {
+    throw invokeResult.error;
+  }
+
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-  
+
   if (!supabaseUrl) {
     throw new Error('VITE_SUPABASE_URL no está configurado');
   }
 
-  // ✅ Obtener la sesión actual del usuario
-  const { data: { session } } = await supabase.auth.getSession();
+  // ✅ Obtener la sesión del usuario autenticado
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
   
-  if (!session?.access_token) {
+  if (sessionError || !session?.access_token) {
     throw new Error('No hay sesión activa. Por favor, inicia sesión nuevamente.');
   }
 
-  // ✅ Usar el JWT del usuario en el fallback
+  // ✅ Usar el JWT del usuario en lugar de la anon key
   const fallbackResponse = await fetch(`${supabaseUrl}/functions/v1/enqueue-messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`,  // ✅ JWT del usuario, NO anon key
+      'Authorization': `Bearer ${session.access_token}`,  // JWT del usuario
     },
     body: JSON.stringify(payload),
   });
@@ -68,7 +75,6 @@ async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
 
   return fallbackData;
 }
-
 // const ALLOWED_STATUS = 'Impreso'; // DISABLED: Now accepts any status
 
 export default function PreviewPage() {

@@ -1,9 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Clock, FileSpreadsheet, ChevronRight, Loader2 } from 'lucide-react';
+import { Clock, FileSpreadsheet, ChevronRight, Loader2, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { motion } from 'framer-motion';
+import { toast } from 'sonner';
 
 interface Job {
   id: string;
@@ -20,6 +33,7 @@ interface Job {
 export default function HistoryPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     async function fetchJobs() {
@@ -34,6 +48,33 @@ export default function HistoryPage() {
     fetchJobs();
   }, []);
 
+  const handleDeleteAll = async () => {
+    setDeleting(true);
+    try {
+      // Delete sent_messages first (foreign key dependency)
+      const { error: msgError } = await supabase
+        .from('sent_messages')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // delete all rows
+
+      if (msgError) throw msgError;
+
+      const { error: jobError } = await supabase
+        .from('jobs')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // delete all rows
+
+      if (jobError) throw jobError;
+
+      setJobs([]);
+      toast.success('Historial eliminado correctamente');
+    } catch (error: any) {
+      toast.error(error.message || 'Error al eliminar el historial');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -44,9 +85,39 @@ export default function HistoryPage() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold font-display">Historial de Envíos</h2>
-        <p className="text-muted-foreground mt-1">Todos los jobs procesados</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold font-display">Historial de Envíos</h2>
+          <p className="text-muted-foreground mt-1">Todos los jobs procesados</p>
+        </div>
+        {jobs.length > 0 && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm" disabled={deleting}>
+                {deleting ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4 mr-2" />
+                )}
+                Eliminar todo
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Eliminar todo el historial?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta acción eliminará todos los jobs y mensajes enviados de forma permanente. No se puede deshacer.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteAll} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                  Sí, eliminar todo
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
 
       {jobs.length === 0 ? (

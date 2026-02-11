@@ -1,6 +1,18 @@
-import { Link, useLocation } from 'react-router-dom';
-import { Upload, History, MessageSquare } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Upload, History, MessageSquare, LogOut, User } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { toast } from 'sonner';
 
 const navItems = [
   { path: '/', label: 'Subir Archivo', icon: Upload },
@@ -9,6 +21,34 @@ const navItems = [
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Get current user
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUserEmail(user?.email || null);
+    });
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserEmail(session?.user?.email || null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      toast.success('Sesión cerrada');
+      navigate('/login');
+    } catch (error) {
+      toast.error('Error al cerrar sesión');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -26,30 +66,57 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </div>
             </Link>
 
-            <nav className="flex items-center gap-1">
-              {navItems.map(item => {
-                const isActive = location.pathname === item.path;
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {isActive && (
-                      <motion.div
-                        layoutId="nav-active"
-                        className="absolute inset-0 bg-primary/10 rounded-lg"
-                        transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
-                      />
-                    )}
-                    <item.icon className="w-4 h-4 relative z-10" />
-                    <span className="relative z-10 hidden sm:inline">{item.label}</span>
-                  </Link>
-                );
-              })}
-            </nav>
+            <div className="flex items-center gap-4">
+              <nav className="flex items-center gap-1">
+                {navItems.map(item => {
+                  const isActive = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {isActive && (
+                        <motion.div
+                          layoutId="nav-active"
+                          className="absolute inset-0 bg-primary/10 rounded-lg"
+                          transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                        />
+                      )}
+                      <item.icon className="w-4 h-4 relative z-10" />
+                      <span className="relative z-10 hidden sm:inline">{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </nav>
+
+              {userEmail && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="gap-2">
+                      <User className="w-4 h-4" />
+                      <span className="hidden sm:inline max-w-[150px] truncate">
+                        {userEmail}
+                      </span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="text-xs text-muted-foreground">
+                      {userEmail}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleLogout} className="text-destructive">
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Cerrar Sesión
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
           </div>
         </div>
       </header>

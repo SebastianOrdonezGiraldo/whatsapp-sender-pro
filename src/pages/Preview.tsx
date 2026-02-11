@@ -22,17 +22,13 @@ interface SendWhatsAppPayload {
     phone_e164: string;
     guide_number: string;
     recipient_name: string;
-    carrier?: string;
-    tracking_url?: string;
   }>;
+  autoProcess?: boolean;
 }
 
 async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
   const invokeResult = await supabase.functions.invoke('enqueue-messages', { 
-    body: { 
-      ...payload,
-      autoProcess: true // Automatically process the queue after enqueuing
-    } 
+    body: payload
   });
 
   if (!invokeResult.error) {
@@ -60,10 +56,7 @@ async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
       apikey: supabaseAnonKey,
       Authorization: `Bearer ${supabaseAnonKey}`,
     },
-    body: JSON.stringify({ 
-      ...payload,
-      autoProcess: true 
-    }),
+    body: JSON.stringify(payload),
   });
 
   const fallbackData = await fallbackResponse.json().catch(() => ({}));
@@ -193,9 +186,8 @@ export default function PreviewPage() {
           phone_e164: r.phoneE164,
           guide_number: r.guideNumber,
           recipient_name: r.recipient,
-          carrier: r.carrier || undefined,
-          tracking_url: r.trackingUrl || undefined,
         })),
+        autoProcess: true,
       });
 
       const processed = data?.processResult;

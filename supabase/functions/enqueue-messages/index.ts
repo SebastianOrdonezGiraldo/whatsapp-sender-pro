@@ -32,6 +32,7 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const authHeader = `Bearer ${supabaseKey}`;
 
     // Create service role client for database operations (no authentication required)
     const supabase = createClient(supabaseUrl, supabaseKey);

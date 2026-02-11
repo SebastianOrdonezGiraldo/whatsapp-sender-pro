@@ -32,36 +32,8 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Extract authorization token from request
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Create Supabase client with user's token for authentication
-    const token = authHeader.replace("Bearer ", "");
-    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: { Authorization: authHeader },
-      },
-    });
-
-    // Verify the user is authenticated
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
-
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized: Invalid or expired token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Create service role client for database operations
+    // Create service role client for database operations (no authentication required)
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const senderNameEnv = Deno.env.get("SENDER_NAME") || "Import Corporal Medical";
@@ -75,10 +47,10 @@ serve(async (req) => {
       );
     }
 
-    // Verify user has permission to access this job
+    // Verify job exists (no authentication required)
     const { data: job, error: jobError } = await supabase
       .from("jobs")
-      .select("id, user_id")
+      .select("id")
       .eq("id", jobId)
       .single();
 
@@ -86,13 +58,6 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: "Job not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (job.user_id !== user.id) {
-      return new Response(
-        JSON.stringify({ error: "Forbidden: You do not have permission to access this job" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 

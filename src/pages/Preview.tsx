@@ -27,53 +27,30 @@ interface SendWhatsAppPayload {
 }
 
 async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
-  // Primero intenta con supabase.functions.invoke
-  const invokeResult = await supabase.functions.invoke('enqueue-messages', { 
-    body: payload
-  });
-
-  if (!invokeResult.error) {
-    return invokeResult.data;
-  }
-
-  // Si falla, intenta con fetch directo usando el JWT del usuario
-  const errorMessage = invokeResult.error.message || '';
-  const isTransportError = errorMessage.toLowerCase().includes('failed to send a request');
-
-  if (!isTransportError) {
-    throw invokeResult.error;
-  }
-
+  // Direct fetch call - no authentication required
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 
-  if (!supabaseUrl) {
-    throw new Error('VITE_SUPABASE_URL no está configurado');
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Configuración de Supabase no encontrada');
   }
 
-  // ✅ Obtener la sesión del usuario autenticado
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-  
-  if (sessionError || !session?.access_token) {
-    throw new Error('No hay sesión activa. Por favor, inicia sesión nuevamente.');
-  }
-
-  // ✅ Usar el JWT del usuario en lugar de la anon key
-  const fallbackResponse = await fetch(`${supabaseUrl}/functions/v1/enqueue-messages`, {
+  const response = await fetch(`${supabaseUrl}/functions/v1/enqueue-messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`,  // JWT del usuario
+      'apikey': supabaseAnonKey,
     },
     body: JSON.stringify(payload),
   });
 
-  const fallbackData = await fallbackResponse.json().catch(() => ({}));
+  const data = await response.json().catch(() => ({}));
 
-  if (!fallbackResponse.ok) {
-    throw new Error((fallbackData as { error?: string }).error || `Error invocando función (${fallbackResponse.status})`);
+  if (!response.ok) {
+    throw new Error((data as { error?: string }).error || `Error invocando función (${response.status})`);
   }
 
-  return fallbackData;
+  return data;
 }
 // const ALLOWED_STATUS = 'Impreso'; // DISABLED: Now accepts any status
 
@@ -164,17 +141,10 @@ export default function PreviewPage() {
     setSending(true);
 
     try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        throw new Error('Usuario no autenticado');
-      }
-
-      // Create job
+      // Create job (no authentication required)
       const { data: job, error: jobError } = await supabase
         .from('jobs')
         .insert({
-          user_id: user.id,
           source_filename: filename,
           total_rows: counts.total,
           valid_rows: counts.valid,

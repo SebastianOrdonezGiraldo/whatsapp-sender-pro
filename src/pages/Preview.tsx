@@ -120,7 +120,7 @@ export default function PreviewPage() {
           duplicate_rows: counts.duplicate,
           status: 'QUEUED',
         })
-        .select()
+        .select('id')
         .single();
 
       if (jobError || !job) throw new Error(jobError?.message || 'Error creando job');

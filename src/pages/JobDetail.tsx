@@ -71,7 +71,16 @@ export default function JobDetailPage() {
   };
 
   useEffect(() => {
-    if (jobId) fetchData();
+    async function fetch() {
+      const [jobRes, msgRes] = await Promise.all([
+        supabase.from('jobs').select('id, source_filename, total_rows, valid_rows, invalid_rows, duplicate_rows, sent_ok, sent_failed, status, created_at').eq('id', jobId!).maybeSingle(),
+        supabase.from('sent_messages').select('id, phone_e164, guide_number, recipient_name, status, error_message, wa_message_id, created_at').eq('job_id', jobId!).order('created_at'),
+      ]);
+      setJob(jobRes.data as Job | null);
+      setMessages((msgRes.data as Message[]) || []);
+      setLoading(false);
+    }
+    if (jobId) fetch();
   }, [jobId]);
 
   const handleRefresh = () => {

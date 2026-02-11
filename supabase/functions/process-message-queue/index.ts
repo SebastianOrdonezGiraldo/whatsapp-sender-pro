@@ -2,6 +2,7 @@
 // @ts-nocheck - This is a Deno edge function, not a Node.js file
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { detectCarrier, getCarrierConfig, type Carrier } from "../_shared/carrier-utils.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,6 +31,8 @@ interface QueueMessage {
   sender_name: string;
   retry_count: number;
   max_retries: number;
+  carrier?: Carrier;
+  tracking_url?: string;
 }
 
 interface ProcessRequest {
@@ -47,31 +50,52 @@ function calculateBackoffDelay(
   return Math.min(delay, maxMs);
 }
 
-// Send WhatsApp message via Graph API
+// Send WhatsApp message via Graph API with carrier-specific template
 async function sendWhatsAppMessage(
   message: QueueMessage,
   waToken: string,
   waPhoneId: string,
-  waTemplateName: string,
+  defaultTemplateName: string,
   waTemplateLang: string,
   waGraphVersion: string
 ): Promise<{ success: boolean; messageId?: string; error?: string; errorCode?: string }> {
   try {
+    // Detect carrier and get correct template
+    const carrierInfo = message.carrier 
+      ? getCarrierConfig(message.carrier)
+      : detectCarrier(message.guide_number);
+    
+    // Use carrier-specific template or fall back to default
+    const templateName = carrierInfo?.templateName || defaultTemplateName;
+    const cleanGuideNumber = message.guide_number.replace(/\D/g, '');
+    
     const url = `https://graph.facebook.com/${waGraphVersion}/${waPhoneId}/messages`;
+    
+    // Template structure:
+    // Body: {{1}} = Nombre, {{2}} = Número guía, {{3}} = Estado
+    // Button: {{1}} = Número guía (for dynamic URL)
     const body = {
       messaging_product: "whatsapp",
       to: message.phone_e164.replace("+", ""),
       type: "template",
       template: {
-        name: waTemplateName,
+        name: templateName,
         language: { code: waTemplateLang },
         components: [
           {
             type: "body",
             parameters: [
-              { type: "text", text: message.recipient_name },
-              { type: "text", text: message.sender_name },
-              { type: "text", text: message.guide_number },
+              { type: "text", text: message.recipient_name }, // {{1}}
+              { type: "text", text: cleanGuideNumber }, // {{2}}
+              { type: "text", text: "En tránsito" }, // {{3}} - Default status
+            ],
+          },
+          {
+            type: "button",
+            sub_type: "url",
+            index: "0",
+            parameters: [
+              { type: "text", text: cleanGuideNumber }, // {{1}} for button URL
             ],
           },
         ],

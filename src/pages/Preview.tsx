@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import type { ParsedRow } from '@/lib/xls-parser';
+import { getCarrierDisplayName } from '@/lib/carrier-detection';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
@@ -21,6 +22,8 @@ interface SendWhatsAppPayload {
     phone_e164: string;
     guide_number: string;
     recipient_name: string;
+    carrier?: string;
+    tracking_url?: string;
   }>;
 }
 
@@ -181,6 +184,8 @@ export default function PreviewPage() {
           phone_e164: r.phoneE164,
           guide_number: r.guideNumber,
           recipient_name: r.recipient,
+          carrier: r.carrier || undefined,
+          tracking_url: r.trackingUrl || undefined,
         })),
       });
 
@@ -262,6 +267,7 @@ export default function PreviewPage() {
                 <th className="text-left p-3 font-medium text-muted-foreground">Destinatario</th>
                 <th className="text-left p-3 font-medium text-muted-foreground">Celular</th>
                 <th className="text-left p-3 font-medium text-muted-foreground">N° Guía</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Transportadora</th>
                 <th className="text-left p-3 font-medium text-muted-foreground">Razón</th>
               </tr>
             </thead>
@@ -294,6 +300,15 @@ export default function PreviewPage() {
                     {row.phoneE164 || row.phoneRaw || '—'}
                   </td>
                   <td className="p-3 font-mono text-xs">{row.guideNumber || '—'}</td>
+                  <td className="p-3">
+                    {row.carrier ? (
+                      <Badge variant="secondary" className="text-xs">
+                        {getCarrierDisplayName(row.carrier)}
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </td>
                   <td className="p-3 text-xs text-muted-foreground">
                     {row.category === 'invalid' && (row.phoneReason || 'Datos incompletos')}
                     {row.category === 'duplicate' && 'Ya enviado previamente (se reenviará)'}

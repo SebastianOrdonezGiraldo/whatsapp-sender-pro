@@ -2,6 +2,7 @@
 // @ts-nocheck - This is a Deno edge function, not a Node.js file
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { detectCarrier, getTrackingUrl } from "../_shared/carrier-utils.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -97,16 +98,23 @@ serve(async (req) => {
 
     const finalSenderName = senderName || senderNameEnv;
 
-    // Prepare messages for queue
-    const queueMessages = rows.map((row) => ({
-      job_id: jobId,
-      phone_e164: row.phone_e164,
-      guide_number: row.guide_number,
-      recipient_name: row.recipient_name,
-      sender_name: finalSenderName,
-      priority: row.priority || 5,
-      status: "PENDING",
-    }));
+    // Prepare messages for queue with carrier detection
+    const queueMessages = rows.map((row) => {
+      const carrierInfo = detectCarrier(row.guide_number);
+      const trackingUrl = getTrackingUrl(row.guide_number, carrierInfo);
+      
+      return {
+        job_id: jobId,
+        phone_e164: row.phone_e164,
+        guide_number: row.guide_number,
+        recipient_name: row.recipient_name,
+        sender_name: finalSenderName,
+        carrier: carrierInfo?.carrier || 'servientrega', // default to servientrega
+        tracking_url: trackingUrl,
+        priority: row.priority || 5,
+        status: "PENDING",
+      };
+    });
 
     // Insert into queue (upsert to handle duplicates)
     const { error: insertError } = await supabase

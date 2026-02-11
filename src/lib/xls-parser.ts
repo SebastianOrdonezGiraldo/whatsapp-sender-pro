@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { normalizePhoneE164 } from './phone-utils';
+import { detectCarrier, getTrackingUrl, type Carrier } from './carrier-detection';
 
 export interface ParsedRow {
   guideNumber: string;
@@ -9,6 +10,8 @@ export interface ParsedRow {
   phoneValid: boolean;
   phoneReason?: string;
   status?: string;
+  carrier?: Carrier | null;
+  trackingUrl?: string | null;
 }
 
 export interface ParseResult {
@@ -110,8 +113,10 @@ function parseCandidateRows(
   let validPhones = 0;
 
   for (const cells of dataRows) {
+    const guideNumber = String(cells[colGuide] || '').trim();
+    
     const parsed: ParsedRow = {
-      guideNumber: String(cells[colGuide] || '').trim(),
+      guideNumber,
       recipient: String(cells[colRecipient] || '').trim(),
       phoneRaw: String(cells[colPhone] || '').trim(),
       phoneE164: '',
@@ -126,6 +131,11 @@ function parseCandidateRows(
     parsed.phoneE164 = normalized.phone;
     parsed.phoneValid = normalized.valid;
     parsed.phoneReason = normalized.reason;
+
+    // Detect carrier based on guide number format
+    const carrierInfo = detectCarrier(guideNumber);
+    parsed.carrier = carrierInfo?.carrier || null;
+    parsed.trackingUrl = getTrackingUrl(guideNumber);
 
     if (parsed.phoneValid) validPhones += 1;
     rows.push(parsed);

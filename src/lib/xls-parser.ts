@@ -23,85 +23,170 @@ const REQUIRED_COLUMNS = {
   status: ['estado'],
 };
 
+const MISSING_COLUMNS_ERROR = 'No se encontraron las columnas requeridas: Número de Guía, Destinatario, Número de Celular';
+const NO_ROWS_ERROR = 'El archivo tiene encabezados válidos pero no contiene filas de datos';
+
+function normalizeHeader(value: string): string {
+  return value
+    .toString()
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
 function findColumn(headers: string[], candidates: string[]): number {
-  const normalized = headers.map(h => h?.toString().toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '') || '');
-  for (const candidate of candidates) {
-    const normCandidate = candidate.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const idx = normalized.findIndex(h => h.includes(normCandidate));
-    if (idx !== -1) return idx;
+  const normalizedHeaders = headers.map(header => normalizeHeader(header || ''));
+  const normalizedCandidates = candidates.map(candidate => normalizeHeader(candidate));
+
+  for (const candidate of normalizedCandidates) {
+    const exactIdx = normalizedHeaders.findIndex(header => header === candidate);
+    if (exactIdx !== -1) return exactIdx;
   }
+
+  for (const candidate of normalizedCandidates) {
+    const includesIdx = normalizedHeaders.findIndex(header => header.includes(candidate));
+    if (includesIdx !== -1) return includesIdx;
+  }
+
   return -1;
 }
 
-export function parseXlsFile(data: ArrayBuffer): ParseResult {
-  const errors: string[] = [];
+function isRepeatedHeaderRow(
+  guideNumber: string,
+  recipient: string,
+  phoneRaw: string,
+  headers: string[],
+  colGuide: number,
+  colRecipient: number,
+  colPhone: number,
+): boolean {
+  return (
+    normalizeHeader(guideNumber) === normalizeHeader(String(headers[colGuide] || '')) &&
+    normalizeHeader(recipient) === normalizeHeader(String(headers[colRecipient] || '')) &&
+    normalizeHeader(phoneRaw) === normalizeHeader(String(headers[colPhone] || ''))
+  );
+}
 
+function parseRowsFromCandidate(
+  jsonData: string[][],
+  startIndex: number,
+  headers: string[],
+  colGuide: number,
+  colRecipient: number,
+  colPhone: number,
+  colStatus: number,
+): { rows: ParsedRow[]; validPhones: number } {
+  const dataRows = jsonData.slice(startIndex + 1);
+  const rows: ParsedRow[] = [];
+  let validPhones = 0;
+
+  for (const row of dataRows) {
+    const guideNumber = String(row[colGuide] || '').trim();
+    const recipient = String(row[colRecipient] || '').trim();
+    const phoneRaw = String(row[colPhone] || '').trim();
+    const status = colStatus !== -1 ? String(row[colStatus] || '').trim() : '';
+
+    if (!guideNumber && !recipient && !phoneRaw) continue;
+
+    if (isRepeatedHeaderRow(guideNumber, recipient, phoneRaw, headers, colGuide, colRecipient, colPhone)) {
+      continue;
+    }
+
+    const { valid, phone, reason } = normalizePhoneE164(phoneRaw);
+    if (valid) validPhones++;
+
+    rows.push({
+      guideNumber,
+      recipient,
+      phoneRaw,
+      phoneE164: phone,
+      phoneValid: valid,
+      phoneReason: reason,
+      status,
+    });
+  }
+
+  return { rows, validPhones };
+}
+
+function parseSheet(sheet: XLSX.WorkSheet): ParseResult {
+  const jsonData = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '' });
+
+  if (jsonData.length < 2) {
+    return { rows: [], errors: ['El archivo no contiene datos suficientes'] };
+  }
+
+  const maxHeaderScanRows = Math.min(300, jsonData.length);
+  const candidates: Array<{ rows: ParsedRow[]; validPhones: number }> = [];
+  let foundHeaderWithoutRows = false;
+
+  for (let i = 0; i < maxHeaderScanRows; i++) {
+    const currentRow = jsonData[i] as string[];
+    if (!currentRow || currentRow.every(cell => !String(cell || '').trim())) continue;
+
+    const headers = currentRow.map(String);
+    const colGuide = findColumn(headers, REQUIRED_COLUMNS.guideNumber);
+    const colRecipient = findColumn(headers, REQUIRED_COLUMNS.recipient);
+    const colPhone = findColumn(headers, REQUIRED_COLUMNS.phone);
+
+    if (colGuide === -1 || colRecipient === -1 || colPhone === -1) continue;
+
+    const colStatus = findColumn(headers, REQUIRED_COLUMNS.status);
+    const candidate = parseRowsFromCandidate(jsonData as string[][], i, headers, colGuide, colRecipient, colPhone, colStatus);
+
+    if (candidate.rows.length > 0) {
+      candidates.push(candidate);
+    } else {
+      foundHeaderWithoutRows = true;
+    }
+  }
+
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => {
+      if (b.validPhones !== a.validPhones) return b.validPhones - a.validPhones;
+      return b.rows.length - a.rows.length;
+    });
+    return { rows: candidates[0].rows, errors: [] };
+  }
+
+  if (foundHeaderWithoutRows) {
+    return { rows: [], errors: [NO_ROWS_ERROR] };
+  }
+
+  return { rows: [], errors: [MISSING_COLUMNS_ERROR] };
+}
+
+export function parseXlsFile(data: ArrayBuffer): ParseResult {
   try {
     const workbook = XLSX.read(data, { type: 'array' });
-    const sheetName = workbook.SheetNames[0];
-    if (!sheetName) {
+
+    if (!workbook.SheetNames.length) {
       return { rows: [], errors: ['El archivo no contiene hojas de cálculo'] };
     }
 
-    const sheet = workbook.Sheets[sheetName];
-    const jsonData = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '' });
+    let foundHeaderButNoRows = false;
 
-    if (jsonData.length < 2) {
-      return { rows: [], errors: ['El archivo no contiene datos suficientes'] };
-    }
+    for (const sheetName of workbook.SheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      const result = parseSheet(sheet);
 
-    // Find header row (first row with recognizable columns)
-    let headerRowIdx = -1;
-    let colGuide = -1, colRecipient = -1, colPhone = -1, colStatus = -1;
+      if (result.errors.length === 0) {
+        return result;
+      }
 
-    for (let i = 0; i < Math.min(10, jsonData.length); i++) {
-      const row = jsonData[i] as string[];
-      const headers = row.map(String);
-      const gIdx = findColumn(headers, REQUIRED_COLUMNS.guideNumber);
-      const rIdx = findColumn(headers, REQUIRED_COLUMNS.recipient);
-      const pIdx = findColumn(headers, REQUIRED_COLUMNS.phone);
-
-      if (gIdx !== -1 && rIdx !== -1 && pIdx !== -1) {
-        headerRowIdx = i;
-        colGuide = gIdx;
-        colRecipient = rIdx;
-        colPhone = pIdx;
-        colStatus = findColumn(headers, REQUIRED_COLUMNS.status);
-        break;
+      if (result.errors.includes(NO_ROWS_ERROR)) {
+        foundHeaderButNoRows = true;
       }
     }
 
-    if (headerRowIdx === -1) {
-      return { rows: [], errors: ['No se encontraron las columnas requeridas: Número de Guía, Destinatario, Número de Celular'] };
+    if (foundHeaderButNoRows) {
+      return { rows: [], errors: [NO_ROWS_ERROR] };
     }
 
-    const dataRows = jsonData.slice(headerRowIdx + 1);
-    const rows: ParsedRow[] = [];
-
-    for (const row of dataRows) {
-      const r = row as string[];
-      const guideNumber = String(r[colGuide] || '').trim();
-      const recipient = String(r[colRecipient] || '').trim();
-      const phoneRaw = String(r[colPhone] || '').trim();
-      const status = colStatus !== -1 ? String(r[colStatus] || '').trim() : '';
-
-      if (!guideNumber && !recipient && !phoneRaw) continue; // skip empty rows
-
-      const { valid, phone, reason } = normalizePhoneE164(phoneRaw);
-
-      rows.push({
-        guideNumber,
-        recipient,
-        phoneRaw,
-        phoneE164: phone,
-        phoneValid: valid,
-        phoneReason: reason,
-        status,
-      });
-    }
-
-    return { rows, errors };
-  } catch (e) {
-    return { rows: [], errors: [`Error al parsear el archivo: ${(e as Error).message}`] };
+    return { rows: [], errors: [MISSING_COLUMNS_ERROR] };
+  } catch (error) {
+    return { rows: [], errors: [`Error al parsear el archivo: ${(error as Error).message}`] };
   }
 }

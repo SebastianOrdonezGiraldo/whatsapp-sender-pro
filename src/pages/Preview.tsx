@@ -140,10 +140,11 @@ export default function PreviewPage() {
   }), [rows]);
 
   const filteredRows = activeTab === 'all' ? rows : rows.filter(r => r.category === activeTab);
+  const sendableCount = counts.valid + counts.duplicate;
 
   async function handleSend() {
-    const validRows = rows.filter(r => r.category === 'valid');
-    if (validRows.length === 0) {
+    const sendableRows = rows.filter(r => r.category === 'valid' || r.category === 'duplicate');
+    if (sendableRows.length === 0) {
       toast.error('No hay filas válidas para enviar');
       return;
     }
@@ -151,16 +152,23 @@ export default function PreviewPage() {
     setSending(true);
 
     try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('Usuario no autenticado');
+      }
+
       // Create job
       const { data: job, error: jobError } = await supabase
         .from('jobs')
         .insert({
+          user_id: user.id,
           source_filename: filename,
           total_rows: counts.total,
           valid_rows: counts.valid,
           invalid_rows: counts.invalid,
           duplicate_rows: counts.duplicate,
-          status: 'PROCESSING',
+          status: 'QUEUED',
         })
         .select('id')
         .single();
@@ -217,13 +225,13 @@ export default function PreviewPage() {
         </div>
         <Button
           onClick={handleSend}
-          disabled={counts.valid === 0 || sending}
+          disabled={sendableCount === 0 || sending}
           className="h-11 px-6 font-display"
         >
           {sending ? (
             <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Enviando...</>
           ) : (
-            <><Send className="w-4 h-4 mr-2" /> Enviar WhatsApp ({counts.valid})</>
+            <><Send className="w-4 h-4 mr-2" /> Enviar WhatsApp ({sendableCount})</>
           )}
         </Button>
       </div>
@@ -288,7 +296,7 @@ export default function PreviewPage() {
                   <td className="p-3 font-mono text-xs">{row.guideNumber || '—'}</td>
                   <td className="p-3 text-xs text-muted-foreground">
                     {row.category === 'invalid' && (row.phoneReason || 'Datos incompletos')}
-                    {row.category === 'duplicate' && 'Ya enviado previamente'}
+                    {row.category === 'duplicate' && 'Ya enviado previamente (se reenviará)'}
                   </td>
                 </motion.tr>
               ))}

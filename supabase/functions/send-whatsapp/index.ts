@@ -1,3 +1,5 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck - This is a Deno edge function, not a Node.js file
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -13,6 +15,13 @@ interface MessageRow {
   recipient_name: string;
 }
 
+interface SendRequestBody {
+  jobId: string;
+  rows: MessageRow[];
+  waToken?: string;
+  waPhoneNumberId?: string;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -21,22 +30,74 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    // Extract authorization token from request
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Missing authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Create Supabase client with user's token for authentication
+    const token = authHeader.replace("Bearer ", "");
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: { Authorization: authHeader },
+      },
+    });
+
+    // Verify the user is authenticated
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
+
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized: Invalid or expired token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Create service role client for database operations
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const waToken = Deno.env.get("WA_TOKEN");
-    const waPhoneId = Deno.env.get("WA_PHONE_NUMBER_ID");
     const waTemplateName = Deno.env.get("WA_TEMPLATE_NAME") || "shipment_notification";
     const waTemplateLang = Deno.env.get("WA_TEMPLATE_LANG") || "es_CO";
     const waGraphVersion = Deno.env.get("WA_GRAPH_VERSION") || "v19.0";
     const senderName = Deno.env.get("SENDER_NAME") || "Import Corporal Medical";
-    const sleepMs = parseInt(Deno.env.get("SEND_DELAY_MS") || "500");
+    const sleepMs = Number.parseInt(Deno.env.get("SEND_DELAY_MS") || "500");
 
-    const { jobId, rows } = await req.json() as { jobId: string; rows: MessageRow[] };
+    const { jobId, rows, waToken: waTokenFromBody, waPhoneNumberId: waPhoneIdFromBody } = await req.json() as SendRequestBody;
+
+    const waToken = waTokenFromBody || Deno.env.get("WA_TOKEN");
+    const waPhoneId = waPhoneIdFromBody || Deno.env.get("WA_PHONE_NUMBER_ID");
 
     if (!jobId || !rows?.length) {
       return new Response(
         JSON.stringify({ error: "Missing jobId or rows" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify user has permission to access this job
+    const { data: job, error: jobError } = await supabase
+      .from("jobs")
+      .select("id, user_id")
+      .eq("id", jobId)
+      .single();
+
+    if (jobError || !job) {
+      return new Response(
+        JSON.stringify({ error: "Job not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (job.user_id !== user.id) {
+      return new Response(
+        JSON.stringify({ error: "Forbidden: You do not have permission to access this job" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 

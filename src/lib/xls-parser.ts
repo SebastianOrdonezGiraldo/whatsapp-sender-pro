@@ -17,9 +17,47 @@ export interface ParseResult {
 }
 
 const REQUIRED_COLUMNS = {
-  guideNumber: ['numero de guia', 'número de guía', 'numero de guía', 'nro guia', 'guia'],
-  recipient: ['destinatario', 'nombre destinatario', 'dest'],
-  phone: ['numero de celular', 'número de celular', 'celular', 'telefono', 'teléfono', 'cel'],
+  guideNumber: [
+    'numero de guia',
+    'número de guía',
+    'numero de guía',
+    'nro guia',
+    'nro. guia',
+    'guia',
+    'no. guia',
+    'numero guia',
+    'guía',
+    'n guia',
+    'n° guia',
+    '# guia'
+  ],
+  recipient: [
+    'destinatario',
+    'nombre destinatario',
+    'dest',
+    'nombre',
+    'cliente',
+    'receptor',
+    'remitente'
+  ],
+  phone: [
+    'numero de celular',
+    'número de celular',
+    'celular',
+    'cel',
+    'telefono celular',
+    'teléfono celular',
+    'nro celular',
+    'nro. celular',
+    'numero celular',
+    'movil',
+    'móvil',
+    'whatsapp',
+    'contacto',
+    'telefono',
+    'teléfono',
+    'tel'
+  ],
   status: ['estado'],
 };
 

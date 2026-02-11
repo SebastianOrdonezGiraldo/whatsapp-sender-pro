@@ -17,14 +17,49 @@ export interface ParseResult {
 }
 
 const REQUIRED_COLUMNS = {
-  guideNumber: ['numero de guia', 'número de guía', 'numero de guía', 'nro guia', 'guia'],
-  recipient: ['destinatario', 'nombre destinatario', 'dest'],
-  phone: ['numero de celular', 'número de celular', 'celular', 'telefono', 'teléfono', 'cel'],
+  guideNumber: [
+    'numero de guia',
+    'número de guía',
+    'numero de guía',
+    'nro guia',
+    'nro. guia',
+    'guia',
+    'no. guia',
+    'numero guia',
+    'guía',
+    'n guia',
+    'n° guia',
+    '# guia'
+  ],
+  recipient: [
+    'destinatario',
+    'nombre destinatario',
+    'dest',
+    'nombre',
+    'cliente',
+    'receptor',
+    'remitente'
+  ],
+  phone: [
+    'numero de celular',
+    'número de celular',
+    'celular',
+    'cel',
+    'telefono celular',
+    'teléfono celular',
+    'nro celular',
+    'nro. celular',
+    'numero celular',
+    'movil',
+    'móvil',
+    'whatsapp',
+    'contacto',
+    'telefono',
+    'teléfono',
+    'tel'
+  ],
   status: ['estado'],
 };
-
-const MISSING_COLUMNS_ERROR = 'No se encontraron las columnas requeridas: Número de Guía, Destinatario, Número de Celular';
-const NO_ROWS_ERROR = 'El archivo tiene encabezados válidos pero no contiene filas de datos';
 
 function normalizeHeader(value: string): string {
   return value
@@ -37,78 +72,20 @@ function normalizeHeader(value: string): string {
 }
 
 function findColumn(headers: string[], candidates: string[]): number {
-  const normalizedHeaders = headers.map(header => normalizeHeader(header || ''));
-  const normalizedCandidates = candidates.map(candidate => normalizeHeader(candidate));
+  const normalizedHeaders = headers.map(h => normalizeHeader(h || ''));
+  const normalizedCandidates = candidates.map(c => normalizeHeader(c));
 
   for (const candidate of normalizedCandidates) {
-    const exactIdx = normalizedHeaders.findIndex(header => header === candidate);
+    const exactIdx = normalizedHeaders.findIndex(h => h === candidate);
     if (exactIdx !== -1) return exactIdx;
   }
 
   for (const candidate of normalizedCandidates) {
-    const includesIdx = normalizedHeaders.findIndex(header => header.includes(candidate));
+    const includesIdx = normalizedHeaders.findIndex(h => h.includes(candidate));
     if (includesIdx !== -1) return includesIdx;
   }
 
   return -1;
-}
-
-function isRepeatedHeaderRow(
-  guideNumber: string,
-  recipient: string,
-  phoneRaw: string,
-  headers: string[],
-  colGuide: number,
-  colRecipient: number,
-  colPhone: number,
-): boolean {
-  return (
-    normalizeHeader(guideNumber) === normalizeHeader(String(headers[colGuide] || '')) &&
-    normalizeHeader(recipient) === normalizeHeader(String(headers[colRecipient] || '')) &&
-    normalizeHeader(phoneRaw) === normalizeHeader(String(headers[colPhone] || ''))
-  );
-}
-
-function parseRowsFromCandidate(
-  jsonData: string[][],
-  startIndex: number,
-  headers: string[],
-  colGuide: number,
-  colRecipient: number,
-  colPhone: number,
-  colStatus: number,
-): { rows: ParsedRow[]; validPhones: number } {
-  const dataRows = jsonData.slice(startIndex + 1);
-  const rows: ParsedRow[] = [];
-  let validPhones = 0;
-
-  for (const row of dataRows) {
-    const guideNumber = String(row[colGuide] || '').trim();
-    const recipient = String(row[colRecipient] || '').trim();
-    const phoneRaw = String(row[colPhone] || '').trim();
-    const status = colStatus !== -1 ? String(row[colStatus] || '').trim() : '';
-
-    if (!guideNumber && !recipient && !phoneRaw) continue;
-
-    if (isRepeatedHeaderRow(guideNumber, recipient, phoneRaw, headers, colGuide, colRecipient, colPhone)) {
-      continue;
-    }
-
-    const { valid, phone, reason } = normalizePhoneE164(phoneRaw);
-    if (valid) validPhones++;
-
-    rows.push({
-      guideNumber,
-      recipient,
-      phoneRaw,
-      phoneE164: phone,
-      phoneValid: valid,
-      phoneReason: reason,
-      status,
-    });
-  }
-
-  return { rows, validPhones };
 }
 
 function parseSheet(sheet: XLSX.WorkSheet): ParseResult {
@@ -119,27 +96,119 @@ function parseSheet(sheet: XLSX.WorkSheet): ParseResult {
   }
 
   const maxHeaderScanRows = Math.min(300, jsonData.length);
+  let foundHeaderWithoutData = false;
+
   const candidates: Array<{ rows: ParsedRow[]; validPhones: number }> = [];
-  let foundHeaderWithoutRows = false;
 
+  // Some SISCLINET exports include intro rows and repeated header-like sections.
+  // Evaluate every viable header row and keep the candidate with best data quality.
   for (let i = 0; i < maxHeaderScanRows; i++) {
-    const currentRow = jsonData[i] as string[];
-    if (!currentRow || currentRow.every(cell => !String(cell || '').trim())) continue;
+    const row = jsonData[i] as string[];
+    if (!row || row.every(cell => !String(cell || '').trim())) continue;
 
-    const headers = currentRow.map(String);
+    const headers = row.map(String);
     const colGuide = findColumn(headers, REQUIRED_COLUMNS.guideNumber);
     const colRecipient = findColumn(headers, REQUIRED_COLUMNS.recipient);
     const colPhone = findColumn(headers, REQUIRED_COLUMNS.phone);
 
-    if (colGuide === -1 || colRecipient === -1 || colPhone === -1) continue;
+    if (colGuide === -1 || colRecipient === -1 || colPhone === -1) {
+      continue;
+    }
 
     const colStatus = findColumn(headers, REQUIRED_COLUMNS.status);
-    const candidate = parseRowsFromCandidate(jsonData as string[][], i, headers, colGuide, colRecipient, colPhone, colStatus);
+    const dataRows = jsonData.slice(i + 1);
+    const rows: ParsedRow[] = [];
+    let validPhones = 0;
 
-    if (candidate.rows.length > 0) {
-      candidates.push(candidate);
+    for (const dataRow of dataRows) {
+      const r = dataRow as string[];
+
+    // Debug: Log encontró encabezados
+    console.log(`[Parser] Encabezados encontrados en fila ${i}:`, {
+      guideCol: colGuide,
+      recipientCol: colRecipient,
+      phoneCol: colPhone,
+      totalDataRows: dataRows.length
+    });
+
+    let rowsProcessed = 0;
+    let rowsSkipped = 0;
+
+    for (const dataRow of dataRows) {
+      const r = dataRow as string[];
+
+      // Skip completely empty rows
+      if (!r || r.every(cell => !String(cell || '').trim())) {
+        rowsSkipped++;
+        continue;
+      }
+
+      const guideNumber = String(r[colGuide] || '').trim();
+      const recipient = String(r[colRecipient] || '').trim();
+      const phoneRaw = String(r[colPhone] || '').trim();
+      const status = colStatus !== -1 ? String(r[colStatus] || '').trim() : '';
+
+      if (!guideNumber && !recipient && !phoneRaw) continue;
+      // Log primera fila de datos para debug
+      if (rowsProcessed === 0) {
+        console.log(`[Parser] Primera fila de datos:`, { guideNumber, recipient, phoneRaw, status });
+      }
+
+      // Skip if all three required columns are empty
+      if (!guideNumber && !recipient && !phoneRaw) {
+        rowsSkipped++;
+        continue;
+      }
+
+      rowsProcessed++;
+
+      // Skip repeated header rows that can appear inside report sections.
+      const normalizedGuide = normalizeHeader(guideNumber);
+      const normalizedRecipient = normalizeHeader(recipient);
+      const normalizedPhone = normalizeHeader(phoneRaw);
+
+      const isRepeatedHeaderRow =
+        normalizedGuide === normalizeHeader(String(headers[colGuide] || '')) &&
+        normalizedRecipient === normalizeHeader(String(headers[colRecipient] || '')) &&
+        normalizedPhone === normalizeHeader(String(headers[colPhone] || ''));
+      if (isRepeatedHeaderRow) continue;
+
+      const headerWords = ['guia', 'destinat', 'celular', 'telefono', 'estado', 'numero'];
+      const headerHits = [normalizedGuide, normalizedRecipient, normalizedPhone]
+        .reduce((acc, value) => acc + (headerWords.some(word => value.includes(word)) ? 1 : 0), 0);
+      if (!/\d/.test(phoneRaw) && headerHits >= 2) continue;
+      // Skip rows that look like headers (contain multiple header keywords but no phone number)
+      const headerWords = ['guia', 'destinat', 'celular', 'telefono', 'estado', 'numero'];
+      const headerHits = [normalizedGuide, normalizedRecipient, normalizedPhone]
+        .reduce((acc, value) => acc + (headerWords.some(word => value.includes(word)) ? 1 : 0), 0);
+      // Only skip if it has NO digits in phone AND looks like a header (2+ header words)
+      if (!phoneRaw || (!/\d/.test(phoneRaw) && headerHits >= 2)) continue;
+
+      const { valid, phone, reason } = normalizePhoneE164(phoneRaw);
+      if (valid) validPhones++;
+
+      rows.push({
+        guideNumber,
+        recipient,
+        phoneRaw,
+        phoneE164: phone,
+        phoneValid: valid,
+        phoneReason: reason,
+        status,
+      });
+    }
+
+    console.log(`[Parser] Resultado procesamiento:`, {
+      rowsProcessed,
+      rowsSkipped,
+      rowsExtracted: rows.length,
+      validPhones
+    });
+
+    if (rows.length > 0) {
+      candidates.push({ rows, validPhones });
     } else {
-      foundHeaderWithoutRows = true;
+      foundHeaderWithoutData = true;
     }
   }
 
@@ -151,11 +220,11 @@ function parseSheet(sheet: XLSX.WorkSheet): ParseResult {
     return { rows: candidates[0].rows, errors: [] };
   }
 
-  if (foundHeaderWithoutRows) {
-    return { rows: [], errors: [NO_ROWS_ERROR] };
+  if (foundHeaderWithoutData) {
+    return { rows: [], errors: ['El archivo tiene encabezados válidos pero no contiene filas de datos'] };
   }
 
-  return { rows: [], errors: [MISSING_COLUMNS_ERROR] };
+  return { rows: [], errors: ['No se encontraron las columnas requeridas: Número de Guía, Destinatario, Número de Celular'] };
 }
 
 export function parseXlsFile(data: ArrayBuffer): ParseResult {
@@ -166,8 +235,7 @@ export function parseXlsFile(data: ArrayBuffer): ParseResult {
       return { rows: [], errors: ['El archivo no contiene hojas de cálculo'] };
     }
 
-    let foundHeaderButNoRows = false;
-
+    let sawRequiredHeaders = false;
     for (const sheetName of workbook.SheetNames) {
       const sheet = workbook.Sheets[sheetName];
       const result = parseSheet(sheet);
@@ -176,17 +244,19 @@ export function parseXlsFile(data: ArrayBuffer): ParseResult {
         return result;
       }
 
-      if (result.errors.includes(NO_ROWS_ERROR)) {
-        foundHeaderButNoRows = true;
+      if (!result.errors.includes('No se encontraron las columnas requeridas: Número de Guía, Destinatario, Número de Celular')) {
+        sawRequiredHeaders = true;
       }
     }
 
-    if (foundHeaderButNoRows) {
-      return { rows: [], errors: [NO_ROWS_ERROR] };
+    if (sawRequiredHeaders) {
+      return { rows: [], errors: ['El archivo tiene encabezados válidos pero no contiene filas de datos'] };
     }
 
-    return { rows: [], errors: [MISSING_COLUMNS_ERROR] };
-  } catch (error) {
-    return { rows: [], errors: [`Error al parsear el archivo: ${(error as Error).message}`] };
+
+
+    return { rows: [], errors: ['No se encontraron las columnas requeridas: Número de Guía, Destinatario, Número de Celular'] };
+  } catch (e) {
+    return { rows: [], errors: [`Error al parsear el archivo: ${(e as Error).message}`] };
   }
 }

@@ -186,7 +186,6 @@ export type Database = {
           recipient_name: string
           sender_name: string
           status: string
-          template_name: string | null
           wa_message_id: string | null
         }
         Insert: {
@@ -199,7 +198,6 @@ export type Database = {
           recipient_name: string
           sender_name?: string
           status?: string
-          template_name?: string | null
           wa_message_id?: string | null
         }
         Update: {
@@ -212,7 +210,6 @@ export type Database = {
           recipient_name?: string
           sender_name?: string
           status?: string
-          template_name?: string | null
           wa_message_id?: string | null
         }
         Relationships: [

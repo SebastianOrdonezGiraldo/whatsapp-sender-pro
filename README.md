@@ -75,7 +75,7 @@ Ver `RLS_SECURITY_OVERVIEW.md` para más detalles.
 - `EXCEL_PARSER_GUIDE.md` - Guía del parser de Excel
 - `RLS_SECURITY_FIX.md` - Seguridad implementada
 - `DEPLOYMENT_GUIDE_RLS.md` - Guía de despliegue
-- **`RATE_LIMITING_GUIDE.md`** - Sistema de rate limiting avanzado (NUEVO)
+- **`RATE_LIMITING_SUMMARY.md`** - Sistema de rate limiting avanzado
 
 ## 🧪 Tests
 

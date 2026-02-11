@@ -1,3 +1,6 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck - This is a Deno edge function, not a Node.js file
+
 /**
  * API Key Validator for Edge Functions
  * 

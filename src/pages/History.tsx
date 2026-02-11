@@ -27,6 +27,7 @@ interface Job {
   sent_failed: number;
   duplicate_rows: number;
   status: string;
+  assigned_to: string | null;
   created_at: string;
 }
 
@@ -39,7 +40,7 @@ export default function HistoryPage() {
     async function fetchJobs() {
       const { data } = await supabase
         .from('jobs')
-        .select('id, source_filename, total_rows, valid_rows, sent_ok, sent_failed, duplicate_rows, status, created_at')
+        .select('id, source_filename, total_rows, valid_rows, sent_ok, sent_failed, duplicate_rows, status, assigned_to, created_at')
         .order('created_at', { ascending: false })
         .limit(50);
       setJobs((data as Job[]) || []);
@@ -146,6 +147,11 @@ export default function HistoryPage() {
                     <p className="font-medium font-display">{job.source_filename}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {new Date(job.created_at).toLocaleString('es-CO')}
+                      {job.assigned_to && (
+                        <span className="ml-2">
+                          • <span className="font-semibold text-primary">{job.assigned_to}</span>
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>

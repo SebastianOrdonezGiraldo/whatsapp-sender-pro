@@ -6,9 +6,18 @@ import { parseXlsFile, type ParseResult } from '@/lib/xls-parser';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LIMITS } from '@/config/limits';
 
+// Lista de encargados de bodega
+const WAREHOUSE_STAFF = [
+  'Maria Paula',
+  'Daniel',
+  'Juan',
+  'Miguel',
+] as const;
+
 export default function UploadPage() {
   const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
+  const [assignedTo, setAssignedTo] = useState<string>('');
   const [dragActive, setDragActive] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +40,13 @@ export default function UploadPage() {
 
   const handlePreview = async () => {
     if (!file) return;
+    
+    // Validar que se haya seleccionado un encargado
+    if (!assignedTo) {
+      setError('Por favor, seleccione quién está realizando el envío');
+      return;
+    }
+    
     setParsing(true);
     setError(null);
 
@@ -63,6 +79,7 @@ export default function UploadPage() {
       // Store in sessionStorage for preview page
       sessionStorage.setItem('wa-preview-data', JSON.stringify(result.rows));
       sessionStorage.setItem('wa-preview-filename', file.name);
+      sessionStorage.setItem('wa-assigned-to', assignedTo);
       navigate('/preview');
     } catch (e) {
       setError(`Error procesando el archivo: ${(e as Error).message}`);
@@ -78,6 +95,33 @@ export default function UploadPage() {
         <p className="text-muted-foreground mt-1">
           Cargue el archivo .xls exportado
         </p>
+      </div>
+
+      {/* Selector de Encargado */}
+      <div className="glass-card p-6 mb-6">
+        <label className="block text-sm font-medium mb-3">
+          ¿Quién está realizando este envío? <span className="text-destructive">*</span>
+        </label>
+        <select
+          value={assignedTo}
+          onChange={(e) => {
+            setAssignedTo(e.target.value);
+            setError(null);
+          }}
+          className="w-full px-4 py-3 rounded-lg border border-border bg-background focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+        >
+          <option value="">Seleccionar encargado...</option>
+          {WAREHOUSE_STAFF.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+        {!assignedTo && (
+          <p className="text-xs text-muted-foreground mt-2">
+            Este campo es obligatorio para trazabilidad de los envíos
+          </p>
+        )}
       </div>
 
       {/* Drop Zone */}
@@ -150,7 +194,7 @@ export default function UploadPage() {
       {/* Preview Button */}
       <Button
         className="w-full mt-6 h-12 text-base font-display"
-        disabled={!file || parsing}
+        disabled={!file || !assignedTo || parsing}
         onClick={handlePreview}
       >
         {parsing ? (

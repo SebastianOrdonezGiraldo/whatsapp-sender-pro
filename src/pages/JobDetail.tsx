@@ -19,6 +19,7 @@ interface Job {
   sent_ok: number;
   sent_failed: number;
   status: string;
+  assigned_to: string | null;
   created_at: string;
 }
 
@@ -187,6 +188,11 @@ export default function JobDetailPage() {
             <h2 className="text-2xl font-bold font-display">{job.source_filename}</h2>
             <p className="text-sm text-muted-foreground">
               {new Date(job.created_at).toLocaleString('es-CO')}
+              {job.assigned_to && (
+                <span className="ml-3">
+                  • Encargado: <span className="font-semibold text-primary">{job.assigned_to}</span>
+                </span>
+              )}
             </p>
           </div>
         </div>

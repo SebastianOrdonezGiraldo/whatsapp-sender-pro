@@ -73,6 +73,7 @@ export default function PreviewPage() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<CategorizedRow[]>([]);
   const [filename, setFilename] = useState('');
+  const [assignedTo, setAssignedTo] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [activeTab, setActiveTab] = useState<RowCategory | 'all'>('all');
@@ -80,7 +81,9 @@ export default function PreviewPage() {
   useEffect(() => {
     const raw = sessionStorage.getItem('wa-preview-data');
     const fname = sessionStorage.getItem('wa-preview-filename') || '';
+    const assigned = sessionStorage.getItem('wa-assigned-to') || '';
     setFilename(fname);
+    setAssignedTo(assigned);
 
     if (!raw) {
       navigate('/');
@@ -166,6 +169,7 @@ export default function PreviewPage() {
           invalid_rows: counts.invalid,
           duplicate_rows: counts.duplicate,
           status: 'QUEUED',
+          assigned_to: assignedTo,
         })
         .select('id')
         .single();
@@ -190,6 +194,7 @@ export default function PreviewPage() {
       }
       sessionStorage.removeItem('wa-preview-data');
       sessionStorage.removeItem('wa-preview-filename');
+      sessionStorage.removeItem('wa-assigned-to');
       navigate(`/history/${job.id}`);
     } catch (err) {
       toast.error(`Error: ${(err as Error).message}`);
@@ -223,7 +228,14 @@ export default function PreviewPage() {
           </Button>
           <div>
             <h2 className="text-2xl font-bold font-display">Previsualización</h2>
-            <p className="text-sm text-muted-foreground font-mono">{filename}</p>
+            <p className="text-sm text-muted-foreground">
+              <span className="font-mono">{filename}</span>
+              {assignedTo && (
+                <span className="ml-3">
+                  • Encargado: <span className="font-semibold text-primary">{assignedTo}</span>
+                </span>
+              )}
+            </p>
           </div>
         </div>
         <Button

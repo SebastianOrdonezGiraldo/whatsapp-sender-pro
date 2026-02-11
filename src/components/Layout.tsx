@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
+import WhatsAppButton from '@/components/WhatsAppButton';
 
 const navItems = [
   { path: '/', label: 'Subir Archivo', icon: Upload },
@@ -132,6 +133,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {children}
         </motion.div>
       </main>
+
+      {/* WhatsApp Support Button */}
+      <WhatsAppButton />
     </div>
   );
 }

@@ -76,7 +76,7 @@ export default function UploadPage() {
       <div className="mb-8">
         <h2 className="text-2xl font-bold font-display">Subir Informe</h2>
         <p className="text-muted-foreground mt-1">
-          Cargue el archivo .xls exportado desde Servientrega SISCLINET
+          Cargue el archivo .xls exportado
         </p>
       </div>
 

@@ -49,12 +49,16 @@ async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
     throw invokeResult.error;
   }
 
+  // Get user session for authentication
+  const { data: { session } } = await supabase.auth.getSession();
+  const userToken = session?.access_token || supabaseAnonKey;
+  
   const fallbackResponse = await fetch(`${supabaseUrl}/functions/v1/enqueue-messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`,
+      Authorization: `Bearer ${userToken}`,
     },
     body: JSON.stringify(payload),
   });

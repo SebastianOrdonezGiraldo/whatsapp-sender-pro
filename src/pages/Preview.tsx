@@ -27,6 +27,7 @@ interface SendWhatsAppPayload {
 }
 
 async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
+  // ✅ Primero intenta con supabase.functions.invoke (incluye JWT automáticamente)
   const invokeResult = await supabase.functions.invoke('enqueue-messages', { 
     body: payload
   });
@@ -35,34 +36,26 @@ async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
     return invokeResult.data;
   }
 
-  const errorMessage = invokeResult.error.message || '';
-  const isTransportError = errorMessage.toLowerCase().includes('failed to send a request');
-
-  if (!isTransportError) {
-    throw invokeResult.error;
-  }
-
+  // ✅ Si falla, usa fetch directo CON el JWT del usuario
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw invokeResult.error;
+  
+  if (!supabaseUrl) {
+    throw new Error('VITE_SUPABASE_URL no está configurado');
   }
 
-  // Get user session for authentication
+  // ✅ Obtener la sesión actual del usuario
   const { data: { session } } = await supabase.auth.getSession();
   
   if (!session?.access_token) {
-    throw new Error('No active session - please log in again');
+    throw new Error('No hay sesión activa. Por favor, inicia sesión nuevamente.');
   }
 
-  // Use the user's JWT token, not the anon key
+  // ✅ Usar el JWT del usuario en el fallback
   const fallbackResponse = await fetch(`${supabaseUrl}/functions/v1/enqueue-messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'apikey': supabaseAnonKey,
-      'Authorization': `Bearer ${session.access_token}`,
+      'Authorization': `Bearer ${session.access_token}`,  // ✅ JWT del usuario, NO anon key
     },
     body: JSON.stringify(payload),
   });

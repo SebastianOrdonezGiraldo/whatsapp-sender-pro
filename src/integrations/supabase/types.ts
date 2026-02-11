@@ -25,6 +25,7 @@ export type Database = {
           source_filename: string
           status: string
           total_rows: number
+          user_id: string | null
           valid_rows: number
         }
         Insert: {
@@ -37,6 +38,7 @@ export type Database = {
           source_filename: string
           status?: string
           total_rows?: number
+          user_id?: string | null
           valid_rows?: number
         }
         Update: {
@@ -49,6 +51,7 @@ export type Database = {
           source_filename?: string
           status?: string
           total_rows?: number
+          user_id?: string | null
           valid_rows?: number
         }
         Relationships: []

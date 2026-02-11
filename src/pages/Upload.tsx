@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload as UploadIcon, FileSpreadsheet, AlertCircle, Loader2 } from 'lucide-react';
+import { Upload as UploadIcon, FileSpreadsheet, AlertCircle, Loader2, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { parseXlsFile, type ParseResult } from '@/lib/xls-parser';
 import { motion, AnimatePresence } from 'framer-motion';
+import { LIMITS } from '@/config/limits';
 
 export default function UploadPage() {
   const navigate = useNavigate();
@@ -45,6 +46,16 @@ export default function UploadPage() {
 
       if (result.rows.length === 0) {
         setError('No se encontraron filas de datos en el archivo');
+        setParsing(false);
+        return;
+      }
+
+      // Validate maximum rows limit
+      if (result.rows.length > LIMITS.MAX_ROWS_PER_FILE) {
+        setError(
+          `El archivo contiene ${result.rows.length} registros, pero el límite es ${LIMITS.MAX_ROWS_PER_FILE}. ` +
+          `Por favor, divida el archivo en partes más pequeñas (máximo ${LIMITS.MAX_ROWS_PER_FILE} registros cada una) y súbalas por separado.`
+        );
         setParsing(false);
         return;
       }
@@ -151,6 +162,33 @@ export default function UploadPage() {
           'Previsualizar'
         )}
       </Button>
+
+      {/* Info about limits */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.2 }}
+        className="mt-6 p-4 rounded-lg bg-primary/5 border border-primary/20"
+      >
+        <div className="flex items-start gap-3">
+          <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+          <div className="text-sm space-y-2">
+            <p className="font-medium text-foreground">Límite de registros</p>
+            <p className="text-muted-foreground">
+              Máximo <span className="font-semibold text-primary">{LIMITS.MAX_ROWS_PER_FILE} registros</span> por archivo. 
+              Si tienes más registros, divide el Excel en varios archivos y súbelos por separado.
+            </p>
+            <div className="text-xs text-muted-foreground mt-2 pt-2 border-t border-primary/10">
+              <p className="font-medium mb-1">💡 Consejos:</p>
+              <ul className="list-disc list-inside space-y-0.5 ml-2">
+                <li>Ordena por fecha o transportadora antes de dividir</li>
+                <li>Cada archivo se procesará independientemente</li>
+                <li>Puedes ver el progreso de cada uno en el Historial</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </motion.div>
     </div>
   );
 }

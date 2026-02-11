@@ -17,9 +17,47 @@ export interface ParseResult {
 }
 
 const REQUIRED_COLUMNS = {
-  guideNumber: ['numero de guia', 'número de guía', 'numero de guía', 'nro guia', 'guia'],
-  recipient: ['destinatario', 'nombre destinatario', 'dest'],
-  phone: ['numero de celular', 'número de celular', 'celular', 'telefono', 'teléfono', 'cel'],
+  guideNumber: [
+    'numero de guia',
+    'número de guía',
+    'numero de guía',
+    'nro guia',
+    'nro. guia',
+    'guia',
+    'no. guia',
+    'numero guia',
+    'guía',
+    'n guia',
+    'n° guia',
+    '# guia'
+  ],
+  recipient: [
+    'destinatario',
+    'nombre destinatario',
+    'dest',
+    'nombre',
+    'cliente',
+    'receptor',
+    'remitente'
+  ],
+  phone: [
+    'numero de celular',
+    'número de celular',
+    'celular',
+    'cel',
+    'telefono celular',
+    'teléfono celular',
+    'nro celular',
+    'nro. celular',
+    'numero celular',
+    'movil',
+    'móvil',
+    'whatsapp',
+    'contacto',
+    'telefono',
+    'teléfono',
+    'tel'
+  ],
   status: ['estado'],
 };
 
@@ -84,12 +122,45 @@ function parseSheet(sheet: XLSX.WorkSheet): ParseResult {
 
     for (const dataRow of dataRows) {
       const r = dataRow as string[];
+
+    // Debug: Log encontró encabezados
+    console.log(`[Parser] Encabezados encontrados en fila ${i}:`, {
+      guideCol: colGuide,
+      recipientCol: colRecipient,
+      phoneCol: colPhone,
+      totalDataRows: dataRows.length
+    });
+
+    let rowsProcessed = 0;
+    let rowsSkipped = 0;
+
+    for (const dataRow of dataRows) {
+      const r = dataRow as string[];
+
+      // Skip completely empty rows
+      if (!r || r.every(cell => !String(cell || '').trim())) {
+        rowsSkipped++;
+        continue;
+      }
+
       const guideNumber = String(r[colGuide] || '').trim();
       const recipient = String(r[colRecipient] || '').trim();
       const phoneRaw = String(r[colPhone] || '').trim();
       const status = colStatus !== -1 ? String(r[colStatus] || '').trim() : '';
 
       if (!guideNumber && !recipient && !phoneRaw) continue;
+      // Log primera fila de datos para debug
+      if (rowsProcessed === 0) {
+        console.log(`[Parser] Primera fila de datos:`, { guideNumber, recipient, phoneRaw, status });
+      }
+
+      // Skip if all three required columns are empty
+      if (!guideNumber && !recipient && !phoneRaw) {
+        rowsSkipped++;
+        continue;
+      }
+
+      rowsProcessed++;
 
       // Skip repeated header rows that can appear inside report sections.
       const normalizedGuide = normalizeHeader(guideNumber);
@@ -106,6 +177,12 @@ function parseSheet(sheet: XLSX.WorkSheet): ParseResult {
       const headerHits = [normalizedGuide, normalizedRecipient, normalizedPhone]
         .reduce((acc, value) => acc + (headerWords.some(word => value.includes(word)) ? 1 : 0), 0);
       if (!/\d/.test(phoneRaw) && headerHits >= 2) continue;
+      // Skip rows that look like headers (contain multiple header keywords but no phone number)
+      const headerWords = ['guia', 'destinat', 'celular', 'telefono', 'estado', 'numero'];
+      const headerHits = [normalizedGuide, normalizedRecipient, normalizedPhone]
+        .reduce((acc, value) => acc + (headerWords.some(word => value.includes(word)) ? 1 : 0), 0);
+      // Only skip if it has NO digits in phone AND looks like a header (2+ header words)
+      if (!phoneRaw || (!/\d/.test(phoneRaw) && headerHits >= 2)) continue;
 
       const { valid, phone, reason } = normalizePhoneE164(phoneRaw);
       if (valid) validPhones++;
@@ -120,6 +197,13 @@ function parseSheet(sheet: XLSX.WorkSheet): ParseResult {
         status,
       });
     }
+
+    console.log(`[Parser] Resultado procesamiento:`, {
+      rowsProcessed,
+      rowsSkipped,
+      rowsExtracted: rows.length,
+      validPhones
+    });
 
     if (rows.length > 0) {
       candidates.push({ rows, validPhones });
@@ -168,6 +252,8 @@ export function parseXlsFile(data: ArrayBuffer): ParseResult {
     if (sawRequiredHeaders) {
       return { rows: [], errors: ['El archivo tiene encabezados válidos pero no contiene filas de datos'] };
     }
+
+
 
     return { rows: [], errors: ['No se encontraron las columnas requeridas: Número de Guía, Destinatario, Número de Celular'] };
   } catch (e) {

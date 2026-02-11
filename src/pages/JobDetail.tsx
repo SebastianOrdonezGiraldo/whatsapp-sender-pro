@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, CheckCircle2, XCircle, MinusCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle2, XCircle, MinusCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { motion } from 'framer-motion';
+import QueueMonitor from '@/components/QueueMonitor';
 
 interface Job {
   id: string;
@@ -30,25 +32,52 @@ interface Message {
   created_at: string;
 }
 
+interface QueueMessage {
+  id: string;
+  phone_e164: string;
+  guide_number: string;
+  recipient_name: string;
+  status: string;
+  priority: number;
+  retry_count: number;
+  max_retries: number;
+  next_retry_at: string | null;
+  error_message: string | null;
+  error_code: string | null;
+  scheduled_at: string;
+  created_at: string;
+}
+
 export default function JobDetailPage() {
   const { jobId } = useParams();
   const navigate = useNavigate();
   const [job, setJob] = useState<Job | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [queueMessages, setQueueMessages] = useState<QueueMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchData = async () => {
+    const [jobRes, msgRes, queueRes] = await Promise.all([
+      supabase.from('jobs').select('*').eq('id', jobId!).maybeSingle(),
+      supabase.from('sent_messages').select('*').eq('job_id', jobId!).order('created_at'),
+      supabase.from('message_queue').select('*').eq('job_id', jobId!).order('created_at'),
+    ]);
+    setJob(jobRes.data as Job | null);
+    setMessages((msgRes.data as Message[]) || []);
+    setQueueMessages((queueRes.data as QueueMessage[]) || []);
+    setLoading(false);
+    setRefreshing(false);
+  };
 
   useEffect(() => {
-    async function fetch() {
-      const [jobRes, msgRes] = await Promise.all([
-        supabase.from('jobs').select('*').eq('id', jobId!).maybeSingle(),
-        supabase.from('sent_messages').select('*').eq('job_id', jobId!).order('created_at'),
-      ]);
-      setJob(jobRes.data as Job | null);
-      setMessages((msgRes.data as Message[]) || []);
-      setLoading(false);
-    }
-    if (jobId) fetch();
+    if (jobId) fetchData();
   }, [jobId]);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchData();
+  };
 
   if (loading) {
     return (
@@ -81,17 +110,35 @@ export default function JobDetailPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/history')}>
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
-        <div>
-          <h2 className="text-2xl font-bold font-display">{job.source_filename}</h2>
-          <p className="text-sm text-muted-foreground">
-            {new Date(job.created_at).toLocaleString('es-CO')}
-          </p>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/history')}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div>
+            <h2 className="text-2xl font-bold font-display">{job.source_filename}</h2>
+            <p className="text-sm text-muted-foreground">
+              {new Date(job.created_at).toLocaleString('es-CO')}
+            </p>
+          </div>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={refreshing}
+        >
+          <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+          Actualizar
+        </Button>
       </div>
+
+      {/* Queue Monitor */}
+      {queueMessages.length > 0 && (
+        <div className="mb-6">
+          <QueueMonitor jobId={jobId!} onStatsUpdate={handleRefresh} />
+        </div>
+      )}
 
       {/* Stats grid */}
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-6">
@@ -103,7 +150,21 @@ export default function JobDetailPage() {
         ))}
       </div>
 
-      {/* Messages table */}
+      {/* Tabs for Messages */}
+      <Tabs defaultValue="sent" className="w-full">
+        <TabsList className="mb-4">
+          <TabsTrigger value="sent">
+            Mensajes Enviados ({messages.length})
+          </TabsTrigger>
+          {queueMessages.length > 0 && (
+            <TabsTrigger value="queue">
+              Cola ({queueMessages.length})
+            </TabsTrigger>
+          )}
+        </TabsList>
+
+        <TabsContent value="sent">
+          {/* Messages table */}
       <div className="glass-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -154,10 +215,87 @@ export default function JobDetailPage() {
 
         {messages.length === 0 && (
           <div className="text-center py-12 text-muted-foreground">
-            <p>No hay mensajes en este job</p>
+            <p>No hay mensajes enviados en este job</p>
           </div>
         )}
       </div>
+        </TabsContent>
+
+        {queueMessages.length > 0 && (
+          <TabsContent value="queue">
+            {/* Queue Messages table */}
+            <div className="glass-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50">
+                      <th className="text-left p-3 font-medium text-muted-foreground">Estado</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground">Prioridad</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground">Destinatario</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground">Celular</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground">N° Guía</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground">Reintentos</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground">Próximo Intento</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground">Error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {queueMessages.map((msg, i) => (
+                      <motion.tr
+                        key={msg.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: i * 0.01 }}
+                        className="border-b border-border/50 last:border-0"
+                      >
+                        <td className="p-3">
+                          <Badge
+                            variant="outline"
+                            className={
+                              msg.status === 'SENT' ? 'status-sent' :
+                              msg.status === 'FAILED' ? 'status-failed' :
+                              msg.status === 'RETRYING' ? 'bg-orange-500/10 text-orange-600' :
+                              msg.status === 'PROCESSING' ? 'bg-blue-500/10 text-blue-600' :
+                              'status-pending'
+                            }
+                          >
+                            {msg.status === 'SENT' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                            {msg.status === 'FAILED' && <XCircle className="w-3 h-3 mr-1" />}
+                            {msg.status === 'RETRYING' && <RefreshCw className="w-3 h-3 mr-1" />}
+                            {msg.status === 'PROCESSING' && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+                            {msg.status === 'PENDING' && <MinusCircle className="w-3 h-3 mr-1" />}
+                            {msg.status}
+                          </Badge>
+                        </td>
+                        <td className="p-3">
+                          <Badge variant="secondary" className="font-mono text-xs">
+                            P{msg.priority}
+                          </Badge>
+                        </td>
+                        <td className="p-3 font-medium">{msg.recipient_name}</td>
+                        <td className="p-3 font-mono text-xs">{msg.phone_e164}</td>
+                        <td className="p-3 font-mono text-xs">{msg.guide_number}</td>
+                        <td className="p-3 text-xs">
+                          {msg.retry_count}/{msg.max_retries}
+                        </td>
+                        <td className="p-3 text-xs">
+                          {msg.next_retry_at 
+                            ? new Date(msg.next_retry_at).toLocaleTimeString('es-CO')
+                            : '—'
+                          }
+                        </td>
+                        <td className="p-3 text-xs text-destructive max-w-[200px] truncate">
+                          {msg.error_message || ''}
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
+        )}
+      </Tabs>
     </div>
   );
 }

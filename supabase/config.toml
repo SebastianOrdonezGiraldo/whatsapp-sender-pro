@@ -1,4 +1,5 @@
 project_id = "rxkumzivkyqkxxjeakbo"
 
 [functions.send-whatsapp]
+# JWT verification is handled manually in the function code with additional authorization checks
 verify_jwt = false

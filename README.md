@@ -1,73 +1,96 @@
-# Welcome to your Lovable project
+# WA Notify - Sistema de Notificaciones WhatsApp
 
-## Project info
+Sistema de notificaciones automáticas por WhatsApp para envíos de Servientrega.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## 🚀 Características
 
-## How can I edit this code?
+- 📤 Envío masivo de notificaciones WhatsApp
+- 📊 Carga de archivos Excel con datos de envíos
+- 📱 Integración con WhatsApp Business API
+- 🔐 Autenticación de usuarios con Supabase
+- 📈 Historial de envíos y estadísticas
+- 🛡️ Seguridad RLS a nivel de base de datos
+- ⏱️ **Rate Limiting Avanzado** con cola de mensajes
+- 🔄 **Reintentos Automáticos** con backoff exponencial
+- 📊 **Monitoreo en Tiempo Real** del estado de envíos
 
-There are several ways of editing your application.
+## 🛠️ Tecnologías
 
-**Use Lovable**
+- **Frontend**: React + TypeScript + Vite
+- **UI**: shadcn/ui + Tailwind CSS
+- **Backend**: Supabase (PostgreSQL + Edge Functions)
+- **Auth**: Supabase Auth
+- **WhatsApp**: Meta WhatsApp Business API
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## 📋 Requisitos
 
-Changes made via Lovable will be committed automatically to this repo.
+- Node.js 18+
+- Cuenta de Supabase
+- WhatsApp Business API credentials
 
-**Use your preferred IDE**
+## 🔧 Instalación
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+```bash
+# Clonar repositorio
+git clone <repo-url>
+cd whatsapp-sender-pro
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+# Instalar dependencias
+npm install
 
-Follow these steps:
+# Configurar variables de entorno
+cp .env.example .env
+# Editar .env con tus credenciales
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Ejecutar en desarrollo
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## 📦 Despliegue
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```bash
+# Build de producción
+npm run build
 
-**Use GitHub Codespaces**
+# Desplegar Edge Functions
+supabase functions deploy send-whatsapp
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+# Aplicar migraciones de BD
+supabase db push
+```
 
-## What technologies are used for this project?
+## 🔐 Seguridad
 
-This project is built with:
+Este proyecto implementa:
+- ✅ Autenticación JWT obligatoria
+- ✅ Row Level Security (RLS) en base de datos
+- ✅ Validación de ownership de recursos
+- ✅ Aislamiento de datos por usuario
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+Ver `RLS_SECURITY_OVERVIEW.md` para más detalles.
 
-## How can I deploy this project?
+## 📚 Documentación
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+- `AUTH_SYSTEM_IMPLEMENTED.md` - Sistema de autenticación
+- `EXCEL_PARSER_GUIDE.md` - Guía del parser de Excel
+- `RLS_SECURITY_FIX.md` - Seguridad implementada
+- `DEPLOYMENT_GUIDE_RLS.md` - Guía de despliegue
+- **`RATE_LIMITING_SUMMARY.md`** - Sistema de rate limiting avanzado
 
-## Can I connect a custom domain to my Lovable project?
+## 🧪 Tests
 
-Yes, you can!
+```bash
+npm test
+```
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## 📝 Licencia
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Privado - Todos los derechos reservados
+
+## 👥 Contribución
+
+Este es un proyecto privado. Para contribuir contacta al equipo de desarrollo.
+
+---
+
+**Desarrollado para optimizar las notificaciones de envíos de Servientrega** 📦✨

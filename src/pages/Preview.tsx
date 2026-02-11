@@ -28,7 +28,12 @@ interface SendWhatsAppPayload {
 }
 
 async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
-  const invokeResult = await supabase.functions.invoke('send-whatsapp', { body: payload });
+  const invokeResult = await supabase.functions.invoke('enqueue-messages', { 
+    body: { 
+      ...payload,
+      autoProcess: true // Automatically process the queue after enqueuing
+    } 
+  });
 
   if (!invokeResult.error) {
     return invokeResult.data;
@@ -48,14 +53,17 @@ async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
     throw invokeResult.error;
   }
 
-  const fallbackResponse = await fetch(`${supabaseUrl}/functions/v1/send-whatsapp`, {
+  const fallbackResponse = await fetch(`${supabaseUrl}/functions/v1/enqueue-messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       apikey: supabaseAnonKey,
       Authorization: `Bearer ${supabaseAnonKey}`,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ 
+      ...payload,
+      autoProcess: true 
+    }),
   });
 
   const fallbackData = await fallbackResponse.json().catch(() => ({}));
@@ -190,7 +198,12 @@ export default function PreviewPage() {
         })),
       });
 
-      toast.success(`Envío completado: ${data?.sent_ok || 0} enviados, ${data?.sent_failed || 0} fallidos`);
+      const processed = data?.processResult;
+      if (processed) {
+        toast.success(`Envío completado: ${processed.sent || 0} enviados, ${processed.failed || 0} fallidos`);
+      } else {
+        toast.success(`${data?.enqueued || 0} mensajes encolados para envío`);
+      }
       sessionStorage.removeItem('wa-preview-data');
       sessionStorage.removeItem('wa-preview-filename');
       navigate(`/history/${job.id}`);

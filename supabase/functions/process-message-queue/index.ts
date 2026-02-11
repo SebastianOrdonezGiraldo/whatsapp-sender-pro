@@ -71,9 +71,11 @@ async function sendWhatsAppMessage(
     
     const url = `https://graph.facebook.com/${waGraphVersion}/${waPhoneId}/messages`;
     
-    // Template structure:
-    // Body: {{1}} = Nombre, {{2}} = Número guía, {{3}} = Estado
-    // Button: {{1}} = Número guía (for dynamic URL)
+    // Template structure for Import Corporal Medical:
+    // Body: {{1}} = Nombre destinatario, {{2}} = Transportadora, {{3}} = Número guía, {{4}} = Estado
+    // Button: Static URL (no variables)
+    const carrierDisplayName = carrierInfo?.displayName || "Servientrega";
+    
     const body = {
       messaging_product: "whatsapp",
       to: message.phone_e164.replace("+", ""),
@@ -85,17 +87,10 @@ async function sendWhatsAppMessage(
           {
             type: "body",
             parameters: [
-              { type: "text", text: message.recipient_name }, // {{1}}
-              { type: "text", text: cleanGuideNumber }, // {{2}}
-              { type: "text", text: "En tránsito" }, // {{3}} - Default status
-            ],
-          },
-          {
-            type: "button",
-            sub_type: "url",
-            index: "0",
-            parameters: [
-              { type: "text", text: cleanGuideNumber }, // {{1}} for button URL
+              { type: "text", text: message.recipient_name }, // {{1}} Nombre del destinatario
+              { type: "text", text: carrierDisplayName }, // {{2}} Transportadora
+              { type: "text", text: cleanGuideNumber }, // {{3}} Número de guía
+              { type: "text", text: "En tránsito" }, // {{4}} Estado del envío
             ],
           },
         ],

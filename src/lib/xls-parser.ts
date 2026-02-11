@@ -120,6 +120,9 @@ function parseSheet(sheet: XLSX.WorkSheet): ParseResult {
     const rows: ParsedRow[] = [];
     let validPhones = 0;
 
+    for (const dataRow of dataRows) {
+      const r = dataRow as string[];
+
     // Debug: Log encontró encabezados
     console.log(`[Parser] Encabezados encontrados en fila ${i}:`, {
       guideCol: colGuide,
@@ -145,6 +148,7 @@ function parseSheet(sheet: XLSX.WorkSheet): ParseResult {
       const phoneRaw = String(r[colPhone] || '').trim();
       const status = colStatus !== -1 ? String(r[colStatus] || '').trim() : '';
 
+      if (!guideNumber && !recipient && !phoneRaw) continue;
       // Log primera fila de datos para debug
       if (rowsProcessed === 0) {
         console.log(`[Parser] Primera fila de datos:`, { guideNumber, recipient, phoneRaw, status });
@@ -169,6 +173,10 @@ function parseSheet(sheet: XLSX.WorkSheet): ParseResult {
         normalizedPhone === normalizeHeader(String(headers[colPhone] || ''));
       if (isRepeatedHeaderRow) continue;
 
+      const headerWords = ['guia', 'destinat', 'celular', 'telefono', 'estado', 'numero'];
+      const headerHits = [normalizedGuide, normalizedRecipient, normalizedPhone]
+        .reduce((acc, value) => acc + (headerWords.some(word => value.includes(word)) ? 1 : 0), 0);
+      if (!/\d/.test(phoneRaw) && headerHits >= 2) continue;
       // Skip rows that look like headers (contain multiple header keywords but no phone number)
       const headerWords = ['guia', 'destinat', 'celular', 'telefono', 'estado', 'numero'];
       const headerHits = [normalizedGuide, normalizedRecipient, normalizedPhone]

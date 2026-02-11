@@ -14,6 +14,56 @@ interface CategorizedRow extends ParsedRow {
   category: RowCategory;
 }
 
+
+interface SendWhatsAppPayload {
+  jobId: string;
+  rows: Array<{
+    phone_e164: string;
+    guide_number: string;
+    recipient_name: string;
+  }>;
+}
+
+async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
+  const invokeResult = await supabase.functions.invoke('send-whatsapp', { body: payload });
+
+  if (!invokeResult.error) {
+    return invokeResult.data;
+  }
+
+  const errorMessage = invokeResult.error.message || '';
+  const isTransportError = errorMessage.toLowerCase().includes('failed to send a request');
+
+  if (!isTransportError) {
+    throw invokeResult.error;
+  }
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw invokeResult.error;
+  }
+
+  const fallbackResponse = await fetch(`${supabaseUrl}/functions/v1/send-whatsapp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${supabaseAnonKey}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const fallbackData = await fallbackResponse.json().catch(() => ({}));
+
+  if (!fallbackResponse.ok) {
+    throw new Error((fallbackData as { error?: string }).error || `Error invocando función (${fallbackResponse.status})`);
+  }
+
+  return fallbackData;
+}
+
 const ALLOWED_STATUS = 'Impreso';
 
 export default function PreviewPage() {
@@ -112,24 +162,19 @@ export default function PreviewPage() {
           duplicate_rows: counts.duplicate,
           status: 'PROCESSING',
         })
-        .select()
+        .select('id')
         .single();
 
       if (jobError || !job) throw new Error(jobError?.message || 'Error creando job');
 
-      // Call edge function to send messages
-      const { data, error } = await supabase.functions.invoke('send-whatsapp', {
-        body: {
-          jobId: job.id,
-          rows: validRows.map(r => ({
-            phone_e164: r.phoneE164,
-            guide_number: r.guideNumber,
-            recipient_name: r.recipient,
-          })),
-        },
+      const data = await invokeSendWhatsApp({
+        jobId: job.id,
+        rows: validRows.map(r => ({
+          phone_e164: r.phoneE164,
+          guide_number: r.guideNumber,
+          recipient_name: r.recipient,
+        })),
       });
-
-      if (error) throw error;
 
       toast.success(`Envío completado: ${data?.sent_ok || 0} enviados, ${data?.sent_failed || 0} fallidos`);
       sessionStorage.removeItem('wa-preview-data');

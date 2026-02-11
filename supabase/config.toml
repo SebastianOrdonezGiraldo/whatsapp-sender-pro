@@ -1,8 +1,5 @@
 project_id = "lrknetzftkezvqmcincb"
 
-[functions.send-whatsapp]
-# JWT verification is handled manually in the function code with additional authorization checks
-verify_jwt = false
 
 [functions.enqueue-messages]
 # No authentication required - public access

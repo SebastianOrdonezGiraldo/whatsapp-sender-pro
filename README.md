@@ -53,7 +53,8 @@ npm run dev
 npm run build
 
 # Desplegar Edge Functions
-supabase functions deploy send-whatsapp
+supabase functions deploy enqueue-messages
+supabase functions deploy process-message-queue
 
 # Aplicar migraciones de BD
 supabase db push

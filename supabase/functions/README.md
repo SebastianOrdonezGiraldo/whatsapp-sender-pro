@@ -6,13 +6,13 @@ Este directorio contiene las Edge Functions de Supabase para el procesamiento de
 
 ```
 functions/
-├── send-whatsapp/          # [LEGACY] Envío directo (para compatibilidad)
-│   ├── index.ts
-│   └── README.md
-├── enqueue-messages/       # [NEW] Encolar mensajes para procesamiento
+├── enqueue-messages/       # Encolar mensajes para procesamiento
 │   └── index.ts
-├── process-message-queue/  # [NEW] Procesar cola con rate limiting
+├── process-message-queue/  # Procesar cola con rate limiting
 │   └── index.ts
+├── _shared/                # Utilidades compartidas
+│   ├── api-key-validator.ts
+│   └── carrier-utils.ts
 ├── deno.json              # Configuración de Deno
 └── import_map.json        # Import map para dependencias
 ```
@@ -48,13 +48,6 @@ functions/
 
 **Autenticación**: JWT token requerido
 
-### 3. `send-whatsapp` (LEGACY)
-
-**Propósito**: Envío directo de mensajes (mantener para compatibilidad)
-
-**Status**: Funcional pero se recomienda usar el nuevo sistema de cola
-
-**Endpoint**: `/functions/v1/send-whatsapp`
 
 ## 🔧 Variables de Entorno
 
@@ -88,7 +81,6 @@ supabase functions deploy
 # O individualmente
 supabase functions deploy enqueue-messages
 supabase functions deploy process-message-queue
-supabase functions deploy send-whatsapp
 ```
 
 ### Configurar secretos
@@ -239,14 +231,8 @@ const corsHeaders = {
 
 - ✨ Nueva función: `enqueue-messages`
 - ✨ Nueva función: `process-message-queue`
-- ♻️ `send-whatsapp` marcada como LEGACY
+- 🗑️ Función `send-whatsapp` eliminada (reemplazada por sistema de cola)
 - 📝 Documentación completa agregada
-
-### [Anterior]
-
-- ✅ `send-whatsapp` con autenticación JWT
-- ✅ Validación de ownership de jobs
-- ✅ RLS policies implementadas
 
 ---
 

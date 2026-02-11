@@ -4,12 +4,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
-import ProtectedRoute from "./components/ProtectedRoute";
 import Index from "./pages/Index";
 import Preview from "./pages/Preview";
 import History from "./pages/History";
 import JobDetail from "./pages/JobDetail";
-import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -21,19 +19,16 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          {/* Public route */}
-          <Route path="/login" element={<Login />} />
-
-          {/* Protected routes */}
+          {/* All routes are now public - no authentication required */}
           <Route
             path="/*"
             element={
               <Layout>
                 <Routes>
-                  <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-                  <Route path="/preview" element={<ProtectedRoute><Preview /></ProtectedRoute>} />
-                  <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
-                  <Route path="/history/:jobId" element={<ProtectedRoute><JobDetail /></ProtectedRoute>} />
+                  <Route path="/" element={<Index />} />
+                  <Route path="/preview" element={<Preview />} />
+                  <Route path="/history" element={<History />} />
+                  <Route path="/history/:jobId" element={<JobDetail />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </Layout>

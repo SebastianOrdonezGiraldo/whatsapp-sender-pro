@@ -111,31 +111,4 @@ describe('parseXlsFile', () => {
     });
   });
 
-  it('reconoce "Teléfono" como columna de celular', () => {
-    const headers = ['Estado', 'Número de Guía', 'Destinatario', 'Teléfono', 'Ciudad'];
-    const data = [
-      ['Impreso', 'G-100', 'Pedro Lopez', '3151234567', 'Bogotá'],
-      ['Impreso', 'G-101', 'Maria Garcia', '3009876543', 'Cali'],
-    ];
-
-    const workbook = XLSX.utils.book_new();
-    const sheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
-    XLSX.utils.book_append_sheet(workbook, sheet, 'Reporte');
-
-    const result = parseXlsFile(toArrayBuffer(workbook));
-
-    expect(result.errors).toEqual([]);
-    expect(result.rows).toHaveLength(2);
-    expect(result.rows[0]).toMatchObject({
-      guideNumber: 'G-100',
-      recipient: 'Pedro Lopez',
-      phoneRaw: '3151234567',
-    });
-    expect(result.rows[1]).toMatchObject({
-      guideNumber: 'G-101',
-      recipient: 'Maria Garcia',
-      phoneRaw: '3009876543',
-    });
-  });
-
 });

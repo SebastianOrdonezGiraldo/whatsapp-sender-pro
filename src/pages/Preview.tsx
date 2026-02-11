@@ -51,14 +51,18 @@ async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
 
   // Get user session for authentication
   const { data: { session } } = await supabase.auth.getSession();
-  const userToken = session?.access_token || supabaseAnonKey;
   
+  if (!session?.access_token) {
+    throw new Error('No active session - please log in again');
+  }
+
+  // Use the user's JWT token, not the anon key
   const fallbackResponse = await fetch(`${supabaseUrl}/functions/v1/enqueue-messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${userToken}`,
+      'apikey': supabaseAnonKey,
+      'Authorization': `Bearer ${session.access_token}`,
     },
     body: JSON.stringify(payload),
   });

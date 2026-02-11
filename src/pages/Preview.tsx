@@ -177,7 +177,7 @@ export default function PreviewPage() {
 
       const data = await invokeSendWhatsApp({
         jobId: job.id,
-        rows: validRows.map(r => ({
+        rows: sendableRows.map(r => ({
           phone_e164: r.phoneE164,
           guide_number: r.guideNumber,
           recipient_name: r.recipient,

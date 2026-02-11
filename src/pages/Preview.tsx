@@ -7,7 +7,6 @@ import { supabase } from '@/integrations/supabase/client';
 import type { ParsedRow } from '@/lib/xls-parser';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { WA_RUNTIME_CONFIG } from '@/config/whatsapp';
 
 type RowCategory = 'valid' | 'invalid' | 'duplicate';
 
@@ -119,30 +118,40 @@ export default function PreviewPage() {
           valid_rows: counts.valid,
           invalid_rows: counts.invalid,
           duplicate_rows: counts.duplicate,
-          status: 'PROCESSING',
+          status: 'QUEUED',
         })
         .select()
         .single();
 
       if (jobError || !job) throw new Error(jobError?.message || 'Error creando job');
 
-      // Call edge function to send messages
-      const { data, error } = await supabase.functions.invoke('send-whatsapp', {
+      // Enqueue messages for rate-limited processing
+      const { data: enqueueData, error: enqueueError } = await supabase.functions.invoke('enqueue-messages', {
         body: {
           jobId: job.id,
-          waToken: WA_RUNTIME_CONFIG.token || undefined,
-          waPhoneNumberId: WA_RUNTIME_CONFIG.phoneNumberId || undefined,
           rows: sendableRows.map(r => ({
             phone_e164: r.phoneE164,
             guide_number: r.guideNumber,
             recipient_name: r.recipient,
+            priority: r.category === 'valid' ? 5 : 7, // Valid messages have higher priority
           })),
+          autoProcess: true, // Start processing immediately
         },
       });
 
-      if (error) throw error;
+      if (enqueueError) throw enqueueError;
 
-      toast.success(`Envío completado: ${data?.sent_ok || 0} enviados, ${data?.sent_failed || 0} fallidos`);
+      const enqueued = enqueueData?.enqueued || 0;
+      const processResult = enqueueData?.processResult;
+
+      if (processResult) {
+        toast.success(
+          `${enqueued} mensajes encolados. Procesados: ${processResult.sent} enviados, ${processResult.retrying} reintentando`
+        );
+      } else {
+        toast.success(`${enqueued} mensajes encolados. El procesamiento ha comenzado.`);
+      }
+
       sessionStorage.removeItem('wa-preview-data');
       sessionStorage.removeItem('wa-preview-filename');
       navigate(`/history/${job.id}`);

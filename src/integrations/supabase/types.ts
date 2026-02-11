@@ -25,6 +25,7 @@ export type Database = {
           source_filename: string
           status: string
           total_rows: number
+          user_id: string | null
           valid_rows: number
         }
         Insert: {
@@ -37,6 +38,7 @@ export type Database = {
           source_filename: string
           status?: string
           total_rows?: number
+          user_id?: string | null
           valid_rows?: number
         }
         Update: {
@@ -49,7 +51,127 @@ export type Database = {
           source_filename?: string
           status?: string
           total_rows?: number
+          user_id?: string | null
           valid_rows?: number
+        }
+        Relationships: []
+      }
+      message_queue: {
+        Row: {
+          id: string
+          job_id: string
+          phone_e164: string
+          guide_number: string
+          recipient_name: string
+          sender_name: string
+          status: string
+          priority: number
+          retry_count: number
+          max_retries: number
+          next_retry_at: string | null
+          scheduled_at: string
+          processing_started_at: string | null
+          processed_at: string | null
+          wa_message_id: string | null
+          error_message: string | null
+          error_code: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          job_id: string
+          phone_e164: string
+          guide_number: string
+          recipient_name: string
+          sender_name: string
+          status?: string
+          priority?: number
+          retry_count?: number
+          max_retries?: number
+          next_retry_at?: string | null
+          scheduled_at?: string
+          processing_started_at?: string | null
+          processed_at?: string | null
+          wa_message_id?: string | null
+          error_message?: string | null
+          error_code?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          job_id?: string
+          phone_e164?: string
+          guide_number?: string
+          recipient_name?: string
+          sender_name?: string
+          status?: string
+          priority?: number
+          retry_count?: number
+          max_retries?: number
+          next_retry_at?: string | null
+          scheduled_at?: string
+          processing_started_at?: string | null
+          processed_at?: string | null
+          wa_message_id?: string | null
+          error_message?: string | null
+          error_code?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_queue_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      rate_limit_config: {
+        Row: {
+          id: string
+          messages_per_second: number
+          messages_per_minute: number
+          messages_per_hour: number
+          batch_size: number
+          batch_delay_ms: number
+          retry_delay_base_ms: number
+          retry_delay_max_ms: number
+          error_threshold: number
+          circuit_break_duration_ms: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          messages_per_second?: number
+          messages_per_minute?: number
+          messages_per_hour?: number
+          batch_size?: number
+          batch_delay_ms?: number
+          retry_delay_base_ms?: number
+          retry_delay_max_ms?: number
+          error_threshold?: number
+          circuit_break_duration_ms?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          messages_per_second?: number
+          messages_per_minute?: number
+          messages_per_hour?: number
+          batch_size?: number
+          batch_delay_ms?: number
+          retry_delay_base_ms?: number
+          retry_delay_max_ms?: number
+          error_threshold?: number
+          circuit_break_duration_ms?: number
+          created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }

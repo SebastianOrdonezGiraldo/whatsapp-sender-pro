@@ -10,6 +10,9 @@ Sistema de notificaciones automáticas por WhatsApp para envíos de Servientrega
 - 🔐 Autenticación de usuarios con Supabase
 - 📈 Historial de envíos y estadísticas
 - 🛡️ Seguridad RLS a nivel de base de datos
+- ⏱️ **Rate Limiting Avanzado** con cola de mensajes
+- 🔄 **Reintentos Automáticos** con backoff exponencial
+- 📊 **Monitoreo en Tiempo Real** del estado de envíos
 
 ## 🛠️ Tecnologías
 
@@ -72,6 +75,7 @@ Ver `RLS_SECURITY_OVERVIEW.md` para más detalles.
 - `EXCEL_PARSER_GUIDE.md` - Guía del parser de Excel
 - `RLS_SECURITY_FIX.md` - Seguridad implementada
 - `DEPLOYMENT_GUIDE_RLS.md` - Guía de despliegue
+- **`RATE_LIMITING_GUIDE.md`** - Sistema de rate limiting avanzado (NUEVO)
 
 ## 🧪 Tests
 

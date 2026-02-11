@@ -168,7 +168,7 @@ serve(async (req) => {
 
     const { jobId, maxMessages } = (await req.json().catch(() => ({}))) as ProcessRequest;
 
-    // Build query for pending messages
+    // Build query for pending messages (no authentication required)
     let query = supabase
       .from("message_queue")
       .select("*")
@@ -178,36 +178,21 @@ serve(async (req) => {
 
     // Filter by job if specified
     if (jobId) {
-      // Verify user owns this job
+      // Verify job exists (no user verification needed)
       const { data: job } = await supabase
         .from("jobs")
-        .select("user_id")
+        .select("id")
         .eq("id", jobId)
         .single();
 
-      if (!job || job.user_id !== user.id) {
+      if (!job) {
         return new Response(
-          JSON.stringify({ error: "Job not found or access denied" }),
-          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: "Job not found" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
       query = query.eq("job_id", jobId);
-    } else {
-      // Only process messages from user's jobs
-      const { data: userJobs } = await supabase
-        .from("jobs")
-        .select("id")
-        .eq("user_id", user.id);
-
-      if (!userJobs || userJobs.length === 0) {
-        return new Response(
-          JSON.stringify({ processed: 0, message: "No jobs found" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      query = query.in("job_id", userJobs.map(j => j.id));
     }
 
     // Limit batch size

@@ -89,7 +89,7 @@ async function sendWhatsAppMessage(
             parameters: [
               { type: "text", text: message.recipient_name }, // {{1}} Nombre del destinatario
               { type: "text", text: cleanGuideNumber }, // {{2}} Número de guía
-              { type: "text", text: "En tránsito" }, // {{3}} Estado de envío
+              { type: "text", text: "Guia creada" }, // {{3}} Estado de envío
             ],
           },
         ],

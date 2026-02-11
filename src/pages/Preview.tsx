@@ -90,10 +90,11 @@ export default function PreviewPage() {
   }), [rows]);
 
   const filteredRows = activeTab === 'all' ? rows : rows.filter(r => r.category === activeTab);
+  const sendableCount = counts.valid + counts.duplicate;
 
   async function handleSend() {
-    const validRows = rows.filter(r => r.category === 'valid');
-    if (validRows.length === 0) {
+    const sendableRows = rows.filter(r => r.category === 'valid' || r.category === 'duplicate');
+    if (sendableRows.length === 0) {
       toast.error('No hay filas válidas para enviar');
       return;
     }
@@ -101,37 +102,56 @@ export default function PreviewPage() {
     setSending(true);
 
     try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('Usuario no autenticado');
+      }
+
       // Create job
       const { data: job, error: jobError } = await supabase
         .from('jobs')
         .insert({
+          user_id: user.id,
           source_filename: filename,
           total_rows: counts.total,
           valid_rows: counts.valid,
           invalid_rows: counts.invalid,
           duplicate_rows: counts.duplicate,
-          status: 'PROCESSING',
+          status: 'QUEUED',
         })
         .select('id')
         .single();
 
       if (jobError || !job) throw new Error(jobError?.message || 'Error creando job');
 
-      // Call edge function to send messages
-      const { data, error } = await supabase.functions.invoke('send-whatsapp', {
+      // Enqueue messages for rate-limited processing
+      const { data: enqueueData, error: enqueueError } = await supabase.functions.invoke('enqueue-messages', {
         body: {
           jobId: job.id,
-          rows: validRows.map(r => ({
+          rows: sendableRows.map(r => ({
             phone_e164: r.phoneE164,
             guide_number: r.guideNumber,
             recipient_name: r.recipient,
+            priority: r.category === 'valid' ? 5 : 7, // Valid messages have higher priority
           })),
+          autoProcess: true, // Start processing immediately
         },
       });
 
-      if (error) throw error;
+      if (enqueueError) throw enqueueError;
 
-      toast.success(`Envío completado: ${data?.sent_ok || 0} enviados, ${data?.sent_failed || 0} fallidos`);
+      const enqueued = enqueueData?.enqueued || 0;
+      const processResult = enqueueData?.processResult;
+
+      if (processResult) {
+        toast.success(
+          `${enqueued} mensajes encolados. Procesados: ${processResult.sent} enviados, ${processResult.retrying} reintentando`
+        );
+      } else {
+        toast.success(`${enqueued} mensajes encolados. El procesamiento ha comenzado.`);
+      }
+
       sessionStorage.removeItem('wa-preview-data');
       sessionStorage.removeItem('wa-preview-filename');
       navigate(`/history/${job.id}`);
@@ -172,13 +192,13 @@ export default function PreviewPage() {
         </div>
         <Button
           onClick={handleSend}
-          disabled={counts.valid === 0 || sending}
+          disabled={sendableCount === 0 || sending}
           className="h-11 px-6 font-display"
         >
           {sending ? (
             <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Enviando...</>
           ) : (
-            <><Send className="w-4 h-4 mr-2" /> Enviar WhatsApp ({counts.valid})</>
+            <><Send className="w-4 h-4 mr-2" /> Enviar WhatsApp ({sendableCount})</>
           )}
         </Button>
       </div>
@@ -243,7 +263,7 @@ export default function PreviewPage() {
                   <td className="p-3 font-mono text-xs">{row.guideNumber || '—'}</td>
                   <td className="p-3 text-xs text-muted-foreground">
                     {row.category === 'invalid' && (row.phoneReason || 'Datos incompletos')}
-                    {row.category === 'duplicate' && 'Ya enviado previamente'}
+                    {row.category === 'duplicate' && 'Ya enviado previamente (se reenviará)'}
                   </td>
                 </motion.tr>
               ))}

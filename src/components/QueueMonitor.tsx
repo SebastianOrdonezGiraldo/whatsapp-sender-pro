@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getSecurityHeaders } from '@/config/security';
 
 interface QueueStats {
   pending: number;
@@ -68,11 +69,25 @@ export default function QueueMonitor({
   const handleProcessQueue = async () => {
     setProcessing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('process-message-queue', {
-        body: { jobId },
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const securityHeaders = getSecurityHeaders();
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/process-message-queue`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseAnonKey,
+          ...securityHeaders,
+        },
+        body: JSON.stringify({ jobId }),
       });
 
-      if (error) throw error;
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.message || data?.error || 'Error procesando cola');
+      }
 
       toast.success(data?.message || 'Cola procesada correctamente');
       await fetchStats();

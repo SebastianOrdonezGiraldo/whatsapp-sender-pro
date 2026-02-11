@@ -8,6 +8,7 @@ import type { ParsedRow } from '@/lib/xls-parser';
 import { getCarrierDisplayName } from '@/lib/carrier-detection';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
+import { getSecurityHeaders } from '@/config/security';
 
 type RowCategory = 'valid' | 'invalid' | 'duplicate';
 
@@ -27,7 +28,7 @@ interface SendWhatsAppPayload {
 }
 
 async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
-  // Direct fetch call - no authentication required
+  // Direct fetch call with API Key security
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 
@@ -35,22 +36,36 @@ async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
     throw new Error('Configuración de Supabase no encontrada');
   }
 
-  const response = await fetch(`${supabaseUrl}/functions/v1/enqueue-messages`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': supabaseAnonKey,
-    },
-    body: JSON.stringify(payload),
-  });
+  try {
+    const securityHeaders = getSecurityHeaders();
+    
+    const response = await fetch(`${supabaseUrl}/functions/v1/enqueue-messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseAnonKey,
+        ...securityHeaders,
+      },
+      body: JSON.stringify(payload),
+    });
 
-  const data = await response.json().catch(() => ({}));
+    const data = await response.json().catch(() => ({}));
 
-  if (!response.ok) {
-    throw new Error((data as { error?: string }).error || `Error invocando función (${response.status})`);
+    if (!response.ok) {
+      // Mensajes de error más amigables
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Acceso denegado. Por favor, contacte al administrador.');
+      }
+      throw new Error((data as { error?: string; message?: string }).message || (data as { error?: string }).error || `Error invocando función (${response.status})`);
+    }
+
+    return data;
+  } catch (error) {
+    if ((error as Error).message.includes('API Key no configurada')) {
+      throw new Error('Error de configuración. Contacte al administrador del sistema.');
+    }
+    throw error;
   }
-
-  return data;
 }
 // const ALLOWED_STATUS = 'Impreso'; // DISABLED: Now accepts any status
 

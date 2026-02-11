@@ -3,12 +3,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { detectCarrier, getTrackingUrl } from "../_shared/carrier-utils.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+import { validateApiKey, handleCorsOptions, corsHeaders } from "../_shared/api-key-validator.ts";
 
 interface MessageRow {
   phone_e164: string;
@@ -26,7 +21,13 @@ interface EnqueueRequest {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return handleCorsOptions();
+  }
+
+  // Validate API Key
+  const apiKeyValidation = validateApiKey(req);
+  if (apiKeyValidation !== true) {
+    return apiKeyValidation; // Return error response
   }
 
   try {

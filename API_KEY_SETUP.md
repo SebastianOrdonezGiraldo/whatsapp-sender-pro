@@ -9,14 +9,19 @@ Tu aplicación ahora está protegida con una **API Key secreta** que debe inclui
 ## 🔑 API Key Generada
 
 ```
-02F5yhscLpWezI-bjWqHTZDdQt-kEW-LiDAzjf0Sspk
+[REDACTADO POR SEGURIDAD - Ver ENV_SETUP_TEMPLATE.md]
 ```
 
 **⚠️ IMPORTANTE:**
-- ✅ Esta clave ya está configurada en tu `.env` local
+- ✅ Genera tu propia API Key (ver abajo)
 - ❌ **NO** compartir esta clave públicamente
 - ❌ **NO** subirla a GitHub/repositorios públicos
 - 🔄 Rotar cada mes o si se compromete
+
+**Para generar tu API Key:**
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+```
 
 ---
 
@@ -28,11 +33,11 @@ El archivo `.env` en la raíz del proyecto debe tener:
 
 ```env
 # Supabase Configuration
-VITE_SUPABASE_URL=https://lrknetzftkezvqmcincb.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=tu_anon_key_aqui
+VITE_SUPABASE_URL=https://YOUR_PROJECT_ID.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=your_anon_key_here
 
 # API Key for security
-VITE_API_KEY=02F5yhscLpWezI-bjWqHTZDdQt-kEW-LiDAzjf0Sspk
+VITE_API_KEY=your_generated_api_key_here
 ```
 
 ### **2. Supabase Edge Functions** ⚠️ PENDIENTE
@@ -40,15 +45,15 @@ VITE_API_KEY=02F5yhscLpWezI-bjWqHTZDdQt-kEW-LiDAzjf0Sspk
 Debes configurar la API Key en Supabase:
 
 ```bash
-supabase secrets set API_KEY="02F5yhscLpWezI-bjWqHTZDdQt-kEW-LiDAzjf0Sspk"
+supabase secrets set API_KEY="your_generated_api_key_here"
 ```
 
 **O desde el Dashboard de Supabase:**
-1. Ve a: https://supabase.com/dashboard/project/lrknetzftkezvqmcincb/settings/functions
+1. Ve a: https://supabase.com/dashboard/project/YOUR_PROJECT_ID/settings/functions
 2. Sección "Secrets"
 3. Agregar nueva secret:
    - **Nombre:** `API_KEY`
-   - **Valor:** `02F5yhscLpWezI-bjWqHTZDdQt-kEW-LiDAzjf0Sspk`
+   - **Valor:** `your_generated_api_key_here`
 4. Guardar
 
 ### **3. Vercel (Producción)** ⚠️ CUANDO DESPLIEGUES
@@ -59,7 +64,7 @@ Si despliegas en Vercel, agrega la variable de entorno:
 2. Tu proyecto → Settings → Environment Variables
 3. Agregar:
    - **Name:** `VITE_API_KEY`
-   - **Value:** `02F5yhscLpWezI-bjWqHTZDdQt-kEW-LiDAzjf0Sspk`
+   - **Value:** `your_generated_api_key_here`
    - **Environments:** Production, Preview, Development
 4. Redesplegar
 
@@ -70,7 +75,7 @@ Si despliegas en Vercel, agrega la variable de entorno:
 ### **1. Configura la API Key en Supabase**
 
 ```bash
-supabase secrets set API_KEY="02F5yhscLpWezI-bjWqHTZDdQt-kEW-LiDAzjf0Sspk"
+supabase secrets set API_KEY="your_generated_api_key_here"
 ```
 
 ### **2. Despliega las funciones actualizadas**
@@ -243,8 +248,8 @@ Si tienes problemas con la configuración:
 
 ---
 
-**Última actualización:** $(Get-Date -Format "yyyy-MM-dd HH:mm")
-**API Key Actual:** `02F5yhscLpWezI-bjWqHTZDdQt-kEW-LiDAzjf0Sspk`
-**Próxima Rotación Recomendada:** Un mes desde hoy
+**Última actualización:** 2026-02-12
+**API Key Actual:** `[GENERA TU PROPIA API KEY]`
+**Próxima Rotación Recomendada:** Un mes desde creación
 
 

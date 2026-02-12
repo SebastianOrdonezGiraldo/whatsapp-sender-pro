@@ -16,6 +16,14 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+.env.production
+.env.development
+
+# Archivos con credenciales (backup de seguridad)
+*_CREDENTIALS.md
+*_SECRETS.md
+.credentials/
+SECURITY_BREACH_RESOLUTION.md
 
 # Editor directories and files
 .vscode/*

@@ -69,6 +69,12 @@ export default function QueueMonitor({
   const handleProcessQueue = async () => {
     setProcessing(true);
     try {
+      // Get current session to include JWT token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('No hay sesión activa. Por favor inicia sesión nuevamente.');
+      }
+
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const securityHeaders = getSecurityHeaders();
@@ -78,6 +84,7 @@ export default function QueueMonitor({
         headers: {
           'Content-Type': 'application/json',
           'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${session.access_token}`,
           ...securityHeaders,
         },
         body: JSON.stringify({ jobId }),

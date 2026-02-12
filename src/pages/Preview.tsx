@@ -28,7 +28,7 @@ interface SendWhatsAppPayload {
 }
 
 async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
-  // Direct fetch call with API Key security
+  // Direct fetch call with API Key security and JWT authentication
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 
@@ -37,6 +37,12 @@ async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
   }
 
   try {
+    // Get current session to include JWT token
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error('No hay sesión activa. Por favor inicia sesión nuevamente.');
+    }
+
     const securityHeaders = getSecurityHeaders();
     
     const response = await fetch(`${supabaseUrl}/functions/v1/enqueue-messages`, {
@@ -44,6 +50,7 @@ async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
       headers: {
         'Content-Type': 'application/json',
         'apikey': supabaseAnonKey,
+        'Authorization': `Bearer ${session.access_token}`,
         ...securityHeaders,
       },
       body: JSON.stringify(payload),

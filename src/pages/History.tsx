@@ -25,7 +25,7 @@ export default function HistoryPage() {
     async function fetchJobs() {
       const { data } = await supabase
         .from('jobs')
-        .select('*')
+        .select('id, source_filename, total_rows, valid_rows, sent_ok, sent_failed, duplicate_rows, status, created_at')
         .order('created_at', { ascending: false })
         .limit(50);
       setJobs((data as Job[]) || []);

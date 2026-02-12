@@ -3,7 +3,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { detectCarrier, getCarrierConfig, type Carrier } from "../_shared/carrier-utils.ts";
-import { validateApiKey, handleCorsOptions, corsHeaders } from "../_shared/api-key-validator.ts";
+import { validateApiKey, validateJWT, validateJobOwnership, handleCorsOptions, corsHeaders } from "../_shared/api-key-validator.ts";
 
 interface RateLimitConfig {
   messages_per_second: number;
@@ -131,11 +131,18 @@ serve(async (req) => {
     return apiKeyValidation; // Return error response
   }
 
+  // Validate JWT and get user
+  const jwtValidation = await validateJWT(req);
+  if (!("user" in jwtValidation)) {
+    return jwtValidation; // Return error response
+  }
+  const { user } = jwtValidation;
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Create service role client for database operations (no authentication required)
+    // Create service role client for database operations
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // WhatsApp configuration
@@ -169,17 +176,28 @@ serve(async (req) => {
 
     const { jobId, maxMessages } = (await req.json().catch(() => ({}))) as ProcessRequest;
 
-    // Build query for pending messages (no authentication required)
+    // If jobId is specified, validate ownership
+    if (jobId) {
+      const ownershipValidation = await validateJobOwnership(jobId, user.id);
+      if (ownershipValidation !== true) {
+        return ownershipValidation; // Return error response
+      }
+    }
+
+    // Build query for pending messages - Only for user's jobs
     let query = supabase
       .from("message_queue")
-      .select("*")
+      .select("*, jobs!inner(user_id)")
+      .eq("jobs.user_id", user.id)
       .in("status", ["PENDING", "RETRYING"])
       .order("priority", { ascending: true })
       .order("scheduled_at", { ascending: true });
 
-    // Filter by job if specified
+    // Filter by specific job if specified
     if (jobId) {
-      // Verify job exists (no user verification needed)
+      query = query.eq("job_id", jobId);
+      
+      // Verify job exists
       const { data: job } = await supabase
         .from("jobs")
         .select("id")

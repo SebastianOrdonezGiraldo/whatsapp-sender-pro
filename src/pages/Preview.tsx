@@ -159,7 +159,13 @@ export default function PreviewPage() {
     setSending(true);
 
     try {
-      // Create job (no authentication required)
+      // Get current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error('No se pudo obtener el usuario autenticado');
+      }
+
+      // Create job with user_id
       const { data: job, error: jobError } = await supabase
         .from('jobs')
         .insert({
@@ -170,6 +176,7 @@ export default function PreviewPage() {
           duplicate_rows: counts.duplicate,
           status: 'QUEUED',
           assigned_to: assignedTo,
+          user_id: user.id,
         })
         .select('id')
         .single();

@@ -3,7 +3,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { detectCarrier, getTrackingUrl } from "../_shared/carrier-utils.ts";
-import { validateApiKey, handleCorsOptions, corsHeaders } from "../_shared/api-key-validator.ts";
+import { validateApiKey, validateJWT, validateJobOwnership, handleCorsOptions, corsHeaders } from "../_shared/api-key-validator.ts";
 
 interface MessageRow {
   phone_e164: string;
@@ -30,12 +30,19 @@ serve(async (req) => {
     return apiKeyValidation; // Return error response
   }
 
+  // Validate JWT and get user
+  const jwtValidation = await validateJWT(req);
+  if (!("user" in jwtValidation)) {
+    return jwtValidation; // Return error response
+  }
+  const { user } = jwtValidation;
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const authHeader = `Bearer ${supabaseKey}`;
 
-    // Create service role client for database operations (no authentication required)
+    // Create service role client for database operations
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const senderNameEnv = Deno.env.get("SENDER_NAME") || "Import Corporal Medical";
@@ -49,18 +56,10 @@ serve(async (req) => {
       );
     }
 
-    // Verify job exists (no authentication required)
-    const { data: job, error: jobError } = await supabase
-      .from("jobs")
-      .select("id")
-      .eq("id", jobId)
-      .single();
-
-    if (jobError || !job) {
-      return new Response(
-        JSON.stringify({ error: "Job not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Validate user owns the job
+    const ownershipValidation = await validateJobOwnership(jobId, user.id);
+    if (ownershipValidation !== true) {
+      return ownershipValidation; // Return error response
     }
 
     const finalSenderName = senderName || senderNameEnv;

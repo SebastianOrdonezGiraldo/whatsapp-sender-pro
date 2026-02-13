@@ -35,71 +35,68 @@ export default function QueueMonitor({
   const [processing, setProcessing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
-  const fetchStats = async () => {
-    try {
-      const { data, error } = await supabase.rpc('get_job_queue_stats', {
-        job_uuid: jobId,
-      });
-
-      if (error) throw error;
-
-      if (data) {
-        setStats(data as QueueStats);
-        setLastUpdate(new Date());
-        if (onStatsUpdate) {
-          onStatsUpdate(data as QueueStats);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching queue stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    let isMounted = true;
+
+    const fetchStats = async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_job_queue_stats', {
+          job_uuid: jobId,
+        });
+
+        if (error) throw error;
+
+        if (data && isMounted) {
+          const statsData = data as QueueStats;
+          setStats(statsData);
+          setLastUpdate(new Date());
+          onStatsUpdate?.(statsData);
+        }
+      } catch (err) {
+        console.error('Error fetching queue stats:', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
     fetchStats();
 
     if (autoRefresh) {
       const interval = setInterval(fetchStats, refreshInterval);
-      return () => clearInterval(interval);
+      return () => { isMounted = false; clearInterval(interval); };
     }
-  }, [jobId, autoRefresh, refreshInterval]);
+
+    return () => { isMounted = false; };
+  }, [jobId, autoRefresh, refreshInterval, onStatsUpdate]);
 
   const handleProcessQueue = async () => {
     setProcessing(true);
     try {
-      // Get current session to include JWT token
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('No hay sesión activa. Por favor inicia sesión nuevamente.');
-      }
-
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const securityHeaders = getSecurityHeaders();
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/process-message-queue`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': supabaseAnonKey,
-          'Authorization': `Bearer ${session.access_token}`,
-          ...securityHeaders,
-        },
-        body: JSON.stringify({ jobId }),
+      const { data, error } = await supabase.functions.invoke('process-message-queue', {
+        body: { jobId },
+        headers: securityHeaders,
       });
 
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data?.message || data?.error || 'Error procesando cola');
+      if (error) {
+        let errorMsg = 'Error procesando cola';
+        try {
+          if ('context' in error) {
+            const ctx = await (error as { context: Response }).context.json();
+            errorMsg = ctx?.message || ctx?.error || errorMsg;
+          } else {
+            errorMsg = error.message || errorMsg;
+          }
+        } catch {
+          errorMsg = error.message || errorMsg;
+        }
+        throw new Error(errorMsg);
       }
 
       toast.success(data?.message || 'Cola procesada correctamente');
-      await fetchStats();
-    } catch (error) {
-      toast.error(`Error procesando cola: ${(error as Error).message}`);
+    } catch (err) {
+      toast.error(`Error procesando cola: ${(err as Error).message}`);
     } finally {
       setProcessing(false);
     }

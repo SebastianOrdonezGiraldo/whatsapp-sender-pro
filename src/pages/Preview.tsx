@@ -16,7 +16,6 @@ interface CategorizedRow extends ParsedRow {
   category: RowCategory;
 }
 
-
 interface SendWhatsAppPayload {
   jobId: string;
   rows: Array<{
@@ -71,7 +70,6 @@ async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
     throw error;
   }
 }
-// const ALLOWED_STATUS = 'Impreso'; // DISABLED: Now accepts any status
 
 export default function PreviewPage() {
   const navigate = useNavigate();
@@ -118,10 +116,6 @@ export default function PreviewPage() {
         if (!row.phoneValid || !row.guideNumber || !row.recipient) {
           return { ...row, category: 'invalid' as const };
         }
-        // Status validation DISABLED - now accepts any status
-        // if (row.status && row.status.toLowerCase() !== ALLOWED_STATUS.toLowerCase()) {
-        //   return { ...row, category: 'invalid' as const, phoneReason: `Estado "${row.status}" no es "${ALLOWED_STATUS}"` };
-        // }
         const key = `${row.phoneE164}|${row.guideNumber}`;
         if (existingSet.has(key)) {
           return { ...row, category: 'duplicate' as const };
@@ -293,27 +287,27 @@ export default function PreviewPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map((row, i) => (
+              {filteredRows.map((row, i) => {
+                const categoryConfig: Record<RowCategory, { className: string; label: string; icon: typeof CheckCircle2 }> = {
+                  valid: { className: 'status-sent', label: 'Válido', icon: CheckCircle2 },
+                  invalid: { className: 'status-failed', label: 'Inválido', icon: XCircle },
+                  duplicate: { className: 'status-duplicate', label: 'Duplicado', icon: Copy },
+                };
+                const config = categoryConfig[row.category];
+                const CategoryIcon = config.icon;
+
+                return (
                 <motion.tr
-                  key={i}
+                  key={`${row.phoneE164}-${row.guideNumber}-${i}`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: i * 0.01 }}
                   className="border-b border-border/50 last:border-0"
                 >
                   <td className="p-3">
-                    <Badge
-                      variant="outline"
-                      className={
-                        row.category === 'valid' ? 'status-sent' :
-                        row.category === 'invalid' ? 'status-failed' :
-                        'status-duplicate'
-                      }
-                    >
-                      {row.category === 'valid' && <CheckCircle2 className="w-3 h-3 mr-1" />}
-                      {row.category === 'invalid' && <XCircle className="w-3 h-3 mr-1" />}
-                      {row.category === 'duplicate' && <Copy className="w-3 h-3 mr-1" />}
-                      {row.category === 'valid' ? 'Válido' : row.category === 'invalid' ? 'Inválido' : 'Duplicado'}
+                    <Badge variant="outline" className={config.className}>
+                      <CategoryIcon className="w-3 h-3 mr-1" />
+                      {config.label}
                     </Badge>
                   </td>
                   <td className="p-3 font-medium">{row.recipient || '—'}</td>
@@ -335,7 +329,8 @@ export default function PreviewPage() {
                     {row.category === 'duplicate' && 'Ya enviado previamente (se reenviará)'}
                   </td>
                 </motion.tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

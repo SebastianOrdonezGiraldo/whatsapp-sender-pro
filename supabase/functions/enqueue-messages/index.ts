@@ -40,7 +40,6 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const authHeader = `Bearer ${supabaseKey}`;
 
     // Create service role client for database operations
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -109,7 +108,7 @@ serve(async (req) => {
           {
             method: "POST",
             headers: {
-              Authorization: authHeader,
+              Authorization: `Bearer ${supabaseKey}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({ jobId }),

@@ -74,16 +74,16 @@ export default function JobDetailPage() {
   };
 
   useEffect(() => {
-    async function fetch() {
+    async function loadInitialData() {
       const [jobRes, msgRes] = await Promise.all([
-        supabase.from('jobs').select('id, source_filename, total_rows, valid_rows, invalid_rows, duplicate_rows, sent_ok, sent_failed, status, created_at').eq('id', jobId!).maybeSingle(),
+        supabase.from('jobs').select('id, source_filename, total_rows, valid_rows, invalid_rows, duplicate_rows, sent_ok, sent_failed, status, assigned_to, created_at').eq('id', jobId!).maybeSingle(),
         supabase.from('sent_messages').select('id, phone_e164, guide_number, recipient_name, status, error_message, wa_message_id, created_at').eq('job_id', jobId!).order('created_at'),
       ]);
       setJob(jobRes.data as Job | null);
       setMessages((msgRes.data as Message[]) || []);
       setLoading(false);
     }
-    if (jobId) fetch();
+    if (jobId) loadInitialData();
   }, [jobId]);
 
   const handleRefresh = () => {
@@ -275,7 +275,13 @@ export default function JobDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {messages.map((msg, i) => (
+              {messages.map((msg, i) => {
+                const statusClass = msg.status === 'SENT' ? 'status-sent' :
+                  msg.status === 'FAILED' ? 'status-failed' : 'status-pending';
+                const StatusIcon = msg.status === 'SENT' ? CheckCircle2 :
+                  msg.status === 'FAILED' ? XCircle : MinusCircle;
+
+                return (
                 <motion.tr
                   key={msg.id}
                   initial={{ opacity: 0 }}
@@ -284,17 +290,8 @@ export default function JobDetailPage() {
                   className="border-b border-border/50 last:border-0"
                 >
                   <td className="p-3">
-                    <Badge
-                      variant="outline"
-                      className={
-                        msg.status === 'SENT' ? 'status-sent' :
-                        msg.status === 'FAILED' ? 'status-failed' :
-                        'status-pending'
-                      }
-                    >
-                      {msg.status === 'SENT' && <CheckCircle2 className="w-3 h-3 mr-1" />}
-                      {msg.status === 'FAILED' && <XCircle className="w-3 h-3 mr-1" />}
-                      {msg.status === 'PENDING' && <MinusCircle className="w-3 h-3 mr-1" />}
+                    <Badge variant="outline" className={statusClass}>
+                      <StatusIcon className="w-3 h-3 mr-1" />
                       {msg.status}
                     </Badge>
                   </td>
@@ -304,7 +301,8 @@ export default function JobDetailPage() {
                   <td className="p-3 font-mono text-xs truncate max-w-[120px]">{msg.wa_message_id || '—'}</td>
                   <td className="p-3 text-xs text-destructive">{msg.error_message || ''}</td>
                 </motion.tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -336,7 +334,18 @@ export default function JobDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {queueMessages.map((msg, i) => (
+                    {queueMessages.map((msg, i) => {
+                      const queueStatusMap: Record<string, { className: string; icon: typeof CheckCircle2 }> = {
+                        SENT: { className: 'status-sent', icon: CheckCircle2 },
+                        FAILED: { className: 'status-failed', icon: XCircle },
+                        RETRYING: { className: 'bg-orange-500/10 text-orange-600', icon: RefreshCw },
+                        PROCESSING: { className: 'bg-blue-500/10 text-blue-600', icon: Loader2 },
+                        PENDING: { className: 'status-pending', icon: MinusCircle },
+                      };
+                      const queueStatus = queueStatusMap[msg.status] ?? queueStatusMap.PENDING;
+                      const QueueIcon = queueStatus.icon;
+
+                      return (
                       <motion.tr
                         key={msg.id}
                         initial={{ opacity: 0 }}
@@ -345,21 +354,8 @@ export default function JobDetailPage() {
                         className="border-b border-border/50 last:border-0"
                       >
                         <td className="p-3">
-                          <Badge
-                            variant="outline"
-                            className={
-                              msg.status === 'SENT' ? 'status-sent' :
-                              msg.status === 'FAILED' ? 'status-failed' :
-                              msg.status === 'RETRYING' ? 'bg-orange-500/10 text-orange-600' :
-                              msg.status === 'PROCESSING' ? 'bg-blue-500/10 text-blue-600' :
-                              'status-pending'
-                            }
-                          >
-                            {msg.status === 'SENT' && <CheckCircle2 className="w-3 h-3 mr-1" />}
-                            {msg.status === 'FAILED' && <XCircle className="w-3 h-3 mr-1" />}
-                            {msg.status === 'RETRYING' && <RefreshCw className="w-3 h-3 mr-1" />}
-                            {msg.status === 'PROCESSING' && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-                            {msg.status === 'PENDING' && <MinusCircle className="w-3 h-3 mr-1" />}
+                          <Badge variant="outline" className={queueStatus.className}>
+                            <QueueIcon className={`w-3 h-3 mr-1 ${msg.status === 'PROCESSING' ? 'animate-spin' : ''}`} />
                             {msg.status}
                           </Badge>
                         </td>
@@ -384,7 +380,8 @@ export default function JobDetailPage() {
                           {msg.error_message || ''}
                         </td>
                       </motion.tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

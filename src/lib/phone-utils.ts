@@ -35,10 +35,5 @@ export function normalizePhoneE164(raw: string): { valid: boolean; phone: string
     return { valid: true, phone: `+${cleaned}` };
   }
 
-  // 11 digits starting with 57 → might be missing a digit
-  if (cleaned.startsWith('57') && cleaned.length === 12) {
-    return { valid: true, phone: `+${cleaned}` };
-  }
-
   return { valid: false, phone: cleaned, reason: `No se pudo normalizar: ${raw}` };
 }

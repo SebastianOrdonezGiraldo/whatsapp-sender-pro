@@ -47,7 +47,7 @@ export default function HistoryPage() {
           return;
         }
 
-        const isAdmin = user.user_metadata?.role === 'admin';
+        const isAdmin = user.app_metadata?.role === 'admin';
 
         // Construir query base
         let query = supabase
@@ -83,7 +83,7 @@ export default function HistoryPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuario no autenticado');
   
-      const isAdmin = user.user_metadata?.role === 'admin';
+      const isAdmin = user.app_metadata?.role === 'admin';
   
       if (isAdmin) {
         // Admin: borrar todos los registros

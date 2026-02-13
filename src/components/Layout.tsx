@@ -46,7 +46,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       await supabase.auth.signOut();
       toast.success('Sesión cerrada');
       navigate('/login');
-    } catch (error) {
+    } catch {
       toast.error('Error al cerrar sesión');
     }
   };

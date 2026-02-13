@@ -104,13 +104,13 @@ async function sendWhatsAppMessage(
 
     if (waRes.ok && waData.messages?.[0]?.id) {
       return { success: true, messageId: waData.messages[0].id };
-    } else {
-      return {
-        success: false,
-        error: waData.error?.message || JSON.stringify(waData),
-        errorCode: waData.error?.code?.toString() || "UNKNOWN",
-      };
     }
+
+    return {
+      success: false,
+      error: waData.error?.message || JSON.stringify(waData),
+      errorCode: waData.error?.code?.toString() || "UNKNOWN",
+    };
   } catch (err) {
     return {
       success: false,
@@ -195,8 +195,6 @@ serve(async (req) => {
 
     // Filter by specific job if specified
     if (jobId) {
-      query = query.eq("job_id", jobId);
-      
       // Verify job exists
       const { data: job } = await supabase
         .from("jobs")

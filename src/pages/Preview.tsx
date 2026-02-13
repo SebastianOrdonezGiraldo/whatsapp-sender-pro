@@ -28,47 +28,44 @@ interface SendWhatsAppPayload {
 }
 
 async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
-  // Direct fetch call with API Key security and JWT authentication
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Configuración de Supabase no encontrada');
-  }
-
   try {
-    // Get current session to include JWT token
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+    // Ensure we have a valid session (triggers auto-refresh if expired)
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
       throw new Error('No hay sesión activa. Por favor inicia sesión nuevamente.');
     }
 
     const securityHeaders = getSecurityHeaders();
-    
-    const response = await fetch(`${supabaseUrl}/functions/v1/enqueue-messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': supabaseAnonKey,
-        'Authorization': `Bearer ${session.access_token}`,
-        ...securityHeaders,
-      },
-      body: JSON.stringify(payload),
+
+    // Use supabase.functions.invoke() which handles auth headers and token refresh automatically
+    const { data, error } = await supabase.functions.invoke('enqueue-messages', {
+      body: payload,
+      headers: securityHeaders,
     });
 
-    const data = await response.json().catch(() => ({}));
+    if (error) {
+      console.error('Error en Edge Function:', error);
 
-    if (!response.ok) {
-      // Mensajes de error más amigables
-      if (response.status === 401 || response.status === 403) {
-        throw new Error('Acceso denegado. Por favor, contacte al administrador.');
+      // Try to extract detailed error message from function response
+      let errorMsg = 'Error invocando función de envío';
+      try {
+        if ('context' in error) {
+          const errorWithContext = error as { context: Response };
+          const ctx = await errorWithContext.context.json();
+          errorMsg = ctx?.message || ctx?.error || errorMsg;
+        } else {
+          errorMsg = error.message || errorMsg;
+        }
+      } catch {
+        errorMsg = error.message || errorMsg;
       }
-      throw new Error((data as { error?: string; message?: string }).message || (data as { error?: string }).error || `Error invocando función (${response.status})`);
+
+      throw new Error(errorMsg);
     }
 
     return data;
   } catch (error) {
-    if ((error as Error).message.includes('API Key no configurada')) {
+    if ((error as Error).message?.includes('API Key no configurada')) {
       throw new Error('Error de configuración. Contacte al administrador del sistema.');
     }
     throw error;

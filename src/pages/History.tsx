@@ -120,6 +120,34 @@ export default function HistoryPage() {
     }
   };
 
+  const handleDeleteJob = async (jobId: string) => {
+    setDeletingJobId(jobId);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuario no autenticado');
+
+      const userIsAdmin = user.app_metadata?.role === 'admin';
+      if (!userIsAdmin) {
+        throw new Error('Solo los administradores pueden eliminar envíos');
+      }
+
+      const { error } = await supabase
+        .from('jobs')
+        .delete()
+        .eq('id', jobId);
+
+      if (error) throw error;
+
+      setJobs((prev) => prev.filter((job) => job.id !== jobId));
+      toast.success('Envío eliminado correctamente');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error al eliminar envío';
+      toast.error(message);
+    } finally {
+      setDeletingJobId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -207,6 +235,50 @@ export default function HistoryPage() {
                       <Badge variant="outline" className="status-duplicate">{job.duplicate_rows} dupes</Badge>
                     )}
                   </div>
+                  {isAdmin && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          disabled={deletingJobId === job.id}
+                          aria-label={`Eliminar envío ${job.source_filename}`}
+                        >
+                          {deletingJobId === job.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>¿Eliminar este envío?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Se eliminará el envío <span className="font-semibold">{job.source_filename}</span> con todos sus mensajes asociados. Esta acción no se puede deshacer.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              void handleDeleteJob(job.id);
+                            }}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            Sí, eliminar envío
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
                   <ChevronRight className="w-4 h-4 text-muted-foreground" />
                 </div>
               </Link>

@@ -34,12 +34,13 @@ interface Job {
 export default function HistoryPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
+  const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     async function fetchJobs() {
       try {
-        // Obtener usuario actual
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
           toast.error('Usuario no autenticado');
@@ -47,22 +48,20 @@ export default function HistoryPage() {
           return;
         }
 
-        const isAdmin = user.app_metadata?.role === 'admin';
+        const userIsAdmin = user.app_metadata?.role === 'admin';
+        setIsAdmin(userIsAdmin);
 
-        // Construir query base
         let query = supabase
           .from('jobs')
           .select('id, source_filename, total_rows, valid_rows, sent_ok, sent_failed, duplicate_rows, status, created_at, user_id')
           .order('created_at', { ascending: false })
           .limit(50);
 
-        // Si no es admin, filtrar solo sus jobs
-        if (!isAdmin) {
+        if (!userIsAdmin) {
           query = query.eq('user_id', user.id);
         }
 
         const { data, error } = await query;
-
         if (error) throw error;
 
         setJobs((data as Job[]) || []);
@@ -73,41 +72,69 @@ export default function HistoryPage() {
         setLoading(false);
       }
     }
-    fetchJobs();
+
+    void fetchJobs();
   }, []);
 
   const handleDeleteAll = async () => {
-    setDeleting(true);
+    setDeletingAll(true);
     try {
-      // Obtener usuario actual
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuario no autenticado');
-  
-      const isAdmin = user.app_metadata?.role === 'admin';
-  
-      if (isAdmin) {
-        // Admin: borrar todos los registros
-        await supabase.from('sent_messages').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        await supabase.from('message_queue').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        await supabase.from('jobs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        toast.success('Todo el historial del sistema eliminado');
-      } else {
-        // Usuario normal: solo borrar sus jobs
-        const { error } = await supabase
-          .from('jobs')
-          .delete()
-          .eq('user_id', user.id);
-        
-        if (error) throw error;
-        toast.success('Tu historial eliminado correctamente');
-      }
-  
+
+      const userIsAdmin = user.app_metadata?.role === 'admin';
+      if (!userIsAdmin) throw new Error('Solo los administradores pueden eliminar el historial');
+
+      const { error: sentMessagesError } = await supabase
+        .from('sent_messages')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (sentMessagesError) throw sentMessagesError;
+
+      const { error: queueError } = await supabase
+        .from('message_queue')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (queueError) throw queueError;
+
+      const { error: jobsError } = await supabase
+        .from('jobs')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (jobsError) throw jobsError;
+
       setJobs([]);
+      toast.success('Todo el historial del sistema eliminado');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Error al eliminar';
       toast.error(message);
     } finally {
-      setDeleting(false);
+      setDeletingAll(false);
+    }
+  };
+
+  const handleDeleteJob = async (jobId: string) => {
+    setDeletingJobId(jobId);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuario no autenticado');
+
+      const userIsAdmin = user.app_metadata?.role === 'admin';
+      if (!userIsAdmin) throw new Error('Solo los administradores pueden eliminar envíos');
+
+      const { error } = await supabase
+        .from('jobs')
+        .delete()
+        .eq('id', jobId);
+      if (error) throw error;
+
+      setJobs((prev) => prev.filter((job) => job.id !== jobId));
+      toast.success('Envío eliminado correctamente');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error al eliminar envío';
+      toast.error(message);
+    } finally {
+      setDeletingJobId(null);
     }
   };
 
@@ -126,11 +153,11 @@ export default function HistoryPage() {
           <h2 className="text-2xl font-bold font-display">Historial de Envíos</h2>
           <p className="text-muted-foreground mt-1">Todos los jobs procesados</p>
         </div>
-        {jobs.length > 0 && (
+        {isAdmin && jobs.length > 0 && (
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm" disabled={deleting}>
-                {deleting ? (
+              <Button variant="destructive" size="sm" disabled={deletingAll}>
+                {deletingAll ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 ) : (
                   <Trash2 className="w-4 h-4 mr-2" />
@@ -147,7 +174,10 @@ export default function HistoryPage() {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDeleteAll} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                <AlertDialogAction
+                  onClick={handleDeleteAll}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
                   Sí, eliminar todo
                 </AlertDialogAction>
               </AlertDialogFooter>
@@ -169,38 +199,75 @@ export default function HistoryPage() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
+              className="glass-card p-4 flex items-center justify-between hover:border-primary/30 transition-colors"
             >
-              <Link
-                to={`/history/${job.id}`}
-                className="glass-card p-4 flex items-center justify-between hover:border-primary/30 transition-colors block"
-              >
-                <div className="flex items-center gap-4">
+              <Link to={`/history/${job.id}`} className="flex items-center justify-between flex-1 min-w-0">
+                <div className="flex items-center gap-4 min-w-0">
                   <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                     <FileSpreadsheet className="w-5 h-5 text-primary" />
                   </div>
-                  <div>
-                    <p className="font-medium font-display">{job.source_filename}</p>
+                  <div className="min-w-0">
+                    <p className="font-medium font-display truncate">{job.source_filename}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {new Date(job.created_at).toLocaleString('es-CO')}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4">
-                  <div className="hidden sm:flex items-center gap-2 text-xs">
-                    {job.sent_ok > 0 && (
-                      <Badge variant="outline" className="status-sent">{job.sent_ok} enviados</Badge>
-                    )}
-                    {job.sent_failed > 0 && (
-                      <Badge variant="outline" className="status-failed">{job.sent_failed} fallidos</Badge>
-                    )}
-                    {job.duplicate_rows > 0 && (
-                      <Badge variant="outline" className="status-duplicate">{job.duplicate_rows} dupes</Badge>
-                    )}
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                <div className="hidden sm:flex items-center gap-2 text-xs ml-4 shrink-0">
+                  {job.sent_ok > 0 && (
+                    <Badge variant="outline" className="status-sent">{job.sent_ok} enviados</Badge>
+                  )}
+                  {job.sent_failed > 0 && (
+                    <Badge variant="outline" className="status-failed">{job.sent_failed} fallidos</Badge>
+                  )}
+                  {job.duplicate_rows > 0 && (
+                    <Badge variant="outline" className="status-duplicate">{job.duplicate_rows} dupes</Badge>
+                  )}
                 </div>
               </Link>
+
+              <div className="flex items-center gap-2 ml-4 shrink-0">
+                {isAdmin && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:text-destructive"
+                        disabled={deletingJobId === job.id}
+                        aria-label={`Eliminar envío ${job.source_filename}`}
+                      >
+                        {deletingJobId === job.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>¿Eliminar este envío?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Se eliminará el envío <span className="font-semibold">{job.source_filename}</span> con todos sus mensajes asociados. Esta acción no se puede deshacer.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => {
+                            void handleDeleteJob(job.id);
+                          }}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Sí, eliminar envío
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              </div>
             </motion.div>
           ))}
         </div>

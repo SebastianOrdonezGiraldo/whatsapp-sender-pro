@@ -124,7 +124,7 @@ export default function HistoryPage() {
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold font-display">Historial de Envíos</h2>
-          <p className="text-muted-foreground mt-1">Todos los jobs procesados</p>
+          <p className="text-muted-foreground mt-1">Todos los mensajes procesados</p>
         </div>
         {jobs.length > 0 && (
           <AlertDialog>

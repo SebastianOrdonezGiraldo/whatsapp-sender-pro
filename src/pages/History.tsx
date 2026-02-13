@@ -35,7 +35,6 @@ export default function HistoryPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
-  const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
@@ -162,7 +161,7 @@ export default function HistoryPage() {
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold font-display">Historial de Envíos</h2>
-          <p className="text-muted-foreground mt-1">Todos los jobs procesados</p>
+          <p className="text-muted-foreground mt-1">Todos los mensajes procesados</p>
         </div>
         {isAdmin && jobs.length > 0 && (
           <AlertDialog>

@@ -12,7 +12,6 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
@@ -28,33 +27,18 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      if (isSignUp) {
-        // Sign Up
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/`,
-          },
-        });
+      // Sign In
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-        if (error) throw error;
+      if (error) throw error;
 
-        toast.success('¡Cuenta creada! Por favor verifica tu email.');
-      } else {
-        // Sign In
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
-        if (error) throw error;
-
-        toast.success('¡Bienvenido!');
-        navigate('/');
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Error de autenticación');
+      toast.success('¡Bienvenido!');
+      navigate('/');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error de autenticación');
     } finally {
       setLoading(false);
     }
@@ -70,12 +54,10 @@ export default function LoginPage() {
             </div>
           </div>
           <CardTitle className="text-2xl text-center font-bold">
-            {isSignUp ? 'Crear Cuenta' : 'Iniciar Sesión'}
+            Iniciar Sesión
           </CardTitle>
           <CardDescription className="text-center">
-            {isSignUp
-              ? 'Crea una cuenta para empezar a enviar notificaciones'
-              : 'Ingresa tus credenciales para continuar'}
+            Ingresa tus credenciales para continuar
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -125,11 +107,6 @@ export default function LoginPage() {
                   )}
                 </button>
               </div>
-              {isSignUp && (
-                <p className="text-xs text-muted-foreground">
-                  Mínimo 6 caracteres
-                </p>
-              )}
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? (
@@ -138,23 +115,10 @@ export default function LoginPage() {
                   Procesando...
                 </>
               ) : (
-                <>{isSignUp ? 'Crear Cuenta' : 'Iniciar Sesión'}</>
+                <>Iniciar Sesión</>
               )}
             </Button>
           </form>
-
-          <div className="mt-4 text-center text-sm">
-            <button
-              type="button"
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="text-primary hover:underline"
-              disabled={loading}
-            >
-              {isSignUp
-                ? '¿Ya tienes cuenta? Inicia sesión'
-                : '¿No tienes cuenta? Regístrate'}
-            </button>
-          </div>
         </CardContent>
       </Card>
     </div>

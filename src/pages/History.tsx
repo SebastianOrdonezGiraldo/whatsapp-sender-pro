@@ -35,6 +35,7 @@ export default function HistoryPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     async function fetchJobs() {
@@ -47,7 +48,8 @@ export default function HistoryPage() {
           return;
         }
 
-        const isAdmin = user.app_metadata?.role === 'admin';
+        const userIsAdmin = user.app_metadata?.role === 'admin';
+        setIsAdmin(userIsAdmin);
 
         // Construir query base
         let query = supabase
@@ -57,7 +59,7 @@ export default function HistoryPage() {
           .limit(50);
 
         // Si no es admin, filtrar solo sus jobs
-        if (!isAdmin) {
+        if (!userIsAdmin) {
           query = query.eq('user_id', user.id);
         }
 
@@ -83,25 +85,32 @@ export default function HistoryPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuario no autenticado');
   
-      const isAdmin = user.app_metadata?.role === 'admin';
-  
-      if (isAdmin) {
-        // Admin: borrar todos los registros
-        await supabase.from('sent_messages').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        await supabase.from('message_queue').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        await supabase.from('jobs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        toast.success('Todo el historial del sistema eliminado');
-      } else {
-        // Usuario normal: solo borrar sus jobs
-        const { error } = await supabase
-          .from('jobs')
-          .delete()
-          .eq('user_id', user.id);
-        
-        if (error) throw error;
-        toast.success('Tu historial eliminado correctamente');
+      const userIsAdmin = user.app_metadata?.role === 'admin';
+
+      if (!userIsAdmin) {
+        throw new Error('Solo los administradores pueden eliminar el historial');
       }
-  
+
+      // Admin: borrar todos los registros
+      const { error: sentMessagesError } = await supabase
+        .from('sent_messages')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (sentMessagesError) throw sentMessagesError;
+
+      const { error: queueError } = await supabase
+        .from('message_queue')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (queueError) throw queueError;
+
+      const { error: jobsError } = await supabase
+        .from('jobs')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (jobsError) throw jobsError;
+
+      toast.success('Todo el historial del sistema eliminado');
       setJobs([]);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Error al eliminar';
@@ -126,7 +135,7 @@ export default function HistoryPage() {
           <h2 className="text-2xl font-bold font-display">Historial de Envíos</h2>
           <p className="text-muted-foreground mt-1">Todos los jobs procesados</p>
         </div>
-        {jobs.length > 0 && (
+        {isAdmin && jobs.length > 0 && (
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="destructive" size="sm" disabled={deleting}>

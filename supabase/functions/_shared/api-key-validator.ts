@@ -147,6 +147,15 @@ export async function validateJobOwnership(jobId: string, userId: string): Promi
   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, supabaseKey);
 
+  // Check if user is admin via user_metadata
+  const { data: { user }, error: userError } = await supabase.auth.admin.getUserById(userId);
+  
+  if (!userError && user?.user_metadata?.role === 'admin') {
+    console.log("✅ Admin user authorized for any job:", jobId, "User:", userId);
+    return true;
+  }
+
+  // Non-admin: validate job ownership
   const { data: job, error } = await supabase
     .from("jobs")
     .select("user_id")

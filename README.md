@@ -91,6 +91,16 @@ Ver `ADMIN_ROLES.md` para configuración de roles de administrador.
 npm test
 ```
 
+## 🔥 Pruebas de Estrés
+
+Para validar capacidad de envío y throughput de cola:
+
+```bash
+npm run stress:test
+```
+
+Ver `STRESS_TESTING.md` para configuración y variables requeridas.
+
 ## 📝 Licencia
 
 Privado - Todos los derechos reservados

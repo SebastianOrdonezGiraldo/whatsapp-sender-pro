@@ -151,7 +151,7 @@ export async function validateJobOwnership(jobId: string, userId: string): Promi
   const { data: { user }, error: userError } = await supabase.auth.admin.getUserById(userId);
   
   if (!userError && user?.user_metadata?.role === 'admin') {
-    console.log("✅ Admin user authorized for any job:", jobId, "User:", userId);
+    console.log("✅ Admin user authorized for job access");
     return true;
   }
 

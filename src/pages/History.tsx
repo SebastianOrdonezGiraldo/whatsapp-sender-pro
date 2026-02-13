@@ -138,6 +138,34 @@ export default function HistoryPage() {
     }
   };
 
+  const handleDeleteJob = async (jobId: string) => {
+    setDeletingJobId(jobId);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuario no autenticado');
+
+      const userIsAdmin = user.app_metadata?.role === 'admin';
+      if (!userIsAdmin) {
+        throw new Error('Solo los administradores pueden eliminar envíos');
+      }
+
+      const { error } = await supabase
+        .from('jobs')
+        .delete()
+        .eq('id', jobId);
+
+      if (error) throw error;
+
+      setJobs((prev) => prev.filter((job) => job.id !== jobId));
+      toast.success('Envío eliminado correctamente');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error al eliminar envío';
+      toast.error(message);
+    } finally {
+      setDeletingJobId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -151,7 +179,7 @@ export default function HistoryPage() {
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold font-display">Historial de Envíos</h2>
-          <p className="text-muted-foreground mt-1">Todos los jobs procesados</p>
+          <p className="text-muted-foreground mt-1">Todos los mensajes procesados</p>
         </div>
         {isAdmin && jobs.length > 0 && (
           <AlertDialog>

@@ -70,6 +70,13 @@ Este proyecto implementa:
 
 Ver `RLS_SECURITY_OVERVIEW.md` para más detalles.
 
+## 👥 Roles y Permisos
+
+- **Usuario estándar**: Solo puede acceder a sus propios jobs y mensajes
+- **Administrador**: Acceso completo a todos los recursos del sistema
+
+Ver `ADMIN_ROLES.md` para configuración de roles de administrador.
+
 ## 📚 Documentación
 
 - `AUTH_SYSTEM_IMPLEMENTED.md` - Sistema de autenticación

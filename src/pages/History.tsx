@@ -27,8 +27,8 @@ interface Job {
   sent_failed: number;
   duplicate_rows: number;
   status: string;
-  assigned_to: string | null;
   created_at: string;
+  user_id: string;
 }
 
 export default function HistoryPage() {
@@ -38,13 +38,40 @@ export default function HistoryPage() {
 
   useEffect(() => {
     async function fetchJobs() {
-      const { data } = await supabase
-        .from('jobs')
-        .select('id, source_filename, total_rows, valid_rows, sent_ok, sent_failed, duplicate_rows, status, assigned_to, created_at')
-        .order('created_at', { ascending: false })
-        .limit(50);
-      setJobs((data as Job[]) || []);
-      setLoading(false);
+      try {
+        // Obtener usuario actual
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          toast.error('Usuario no autenticado');
+          setLoading(false);
+          return;
+        }
+
+        const isAdmin = user.user_metadata?.role === 'admin';
+
+        // Construir query base
+        let query = supabase
+          .from('jobs')
+          .select('id, source_filename, total_rows, valid_rows, sent_ok, sent_failed, duplicate_rows, status, created_at, user_id')
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        // Si no es admin, filtrar solo sus jobs
+        if (!isAdmin) {
+          query = query.eq('user_id', user.id);
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+
+        setJobs((data as Job[]) || []);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Error al cargar el historial';
+        toast.error(message);
+      } finally {
+        setLoading(false);
+      }
     }
     fetchJobs();
   }, []);
@@ -52,25 +79,33 @@ export default function HistoryPage() {
   const handleDeleteAll = async () => {
     setDeleting(true);
     try {
-      // Delete sent_messages first (foreign key dependency)
-      const { error: msgError } = await supabase
-        .from('sent_messages')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000'); // delete all rows
-
-      if (msgError) throw msgError;
-
-      const { error: jobError } = await supabase
-        .from('jobs')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000'); // delete all rows
-
-      if (jobError) throw jobError;
-
+      // Obtener usuario actual
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuario no autenticado');
+  
+      const isAdmin = user.user_metadata?.role === 'admin';
+  
+      if (isAdmin) {
+        // Admin: borrar todos los registros
+        await supabase.from('sent_messages').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await supabase.from('message_queue').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await supabase.from('jobs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        toast.success('Todo el historial del sistema eliminado');
+      } else {
+        // Usuario normal: solo borrar sus jobs
+        const { error } = await supabase
+          .from('jobs')
+          .delete()
+          .eq('user_id', user.id);
+        
+        if (error) throw error;
+        toast.success('Tu historial eliminado correctamente');
+      }
+  
       setJobs([]);
-      toast.success('Historial eliminado correctamente');
-    } catch (error: any) {
-      toast.error(error.message || 'Error al eliminar el historial');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error al eliminar';
+      toast.error(message);
     } finally {
       setDeleting(false);
     }
@@ -147,11 +182,6 @@ export default function HistoryPage() {
                     <p className="font-medium font-display">{job.source_filename}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {new Date(job.created_at).toLocaleString('es-CO')}
-                      {job.assigned_to && (
-                        <span className="ml-2">
-                          • <span className="font-semibold text-primary">{job.assigned_to}</span>
-                        </span>
-                      )}
                     </p>
                   </div>
                 </div>

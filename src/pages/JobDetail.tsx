@@ -280,7 +280,7 @@ export default function JobDetailPage() {
             onClick={handleExportJobPdf}
             disabled={messages.length === 0}
           >
-            Exportar envío a PDF
+            Exportar PDF
           </Button>
           {job.sent_failed > 0 && (
             <Button

@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { detectCarrier, getCarrierConfig, type Carrier } from "../_shared/carrier-utils.ts";
 import { validateApiKey, validateJWT, validateJobOwnership, handleCorsOptions, corsHeaders } from "../_shared/api-key-validator.ts";
+import { getWhatsAppFriendlyMessage } from "../_shared/wa-error-messages.ts";
 
 interface RateLimitConfig {
   messages_per_second: number;
@@ -100,22 +101,39 @@ async function sendWhatsAppMessage(
       body: JSON.stringify(body),
     });
 
-    const waData = await waRes.json();
+    let waData: { messages?: { id: string }[]; error?: { message?: string; code?: number } };
+    try {
+      const text = await waRes.text();
+      waData = text ? JSON.parse(text) : {};
+    } catch {
+      return {
+        success: false,
+        error: "Respuesta inválida de WhatsApp",
+        errorCode: "PARSE_ERROR",
+      };
+    }
 
     if (waRes.ok && waData.messages?.[0]?.id) {
       return { success: true, messageId: waData.messages[0].id };
     }
 
+    const errorCode = waData.error?.code?.toString() || "UNKNOWN";
+    const rawError = waData.error?.message || JSON.stringify(waData);
+    const friendlyMessage = getWhatsAppFriendlyMessage(errorCode, rawError);
+
     return {
       success: false,
-      error: waData.error?.message || JSON.stringify(waData),
-      errorCode: waData.error?.code?.toString() || "UNKNOWN",
+      error: friendlyMessage,
+      errorCode,
     };
   } catch (err) {
+    const errorCode = "NETWORK_ERROR";
+    const rawError = (err as Error).message;
+    const friendlyMessage = getWhatsAppFriendlyMessage(errorCode, rawError);
     return {
       success: false,
-      error: (err as Error).message,
-      errorCode: "NETWORK_ERROR",
+      error: friendlyMessage,
+      errorCode,
     };
   }
 }
@@ -154,7 +172,10 @@ serve(async (req) => {
 
     if (!waToken || !waPhoneId) {
       return new Response(
-        JSON.stringify({ error: "WhatsApp credentials not configured" }),
+        JSON.stringify({
+          error: "WhatsApp credentials not configured",
+          message: "Credenciales de WhatsApp no configuradas. Contacte al administrador.",
+        }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -219,7 +240,13 @@ serve(async (req) => {
     const { data: messages, error: fetchError } = await query;
 
     if (fetchError) {
-      throw new Error(`Failed to fetch messages: ${fetchError.message}`);
+      return new Response(
+        JSON.stringify({
+          error: fetchError.message,
+          message: "No se pudieron cargar los mensajes de la cola. Intente de nuevo.",
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     if (!messages || messages.length === 0) {
@@ -387,8 +414,12 @@ serve(async (req) => {
     );
   } catch (err) {
     console.error("Error processing queue:", err);
+    const msg = (err as Error).message;
     return new Response(
-      JSON.stringify({ error: (err as Error).message }),
+      JSON.stringify({
+        error: msg,
+        message: msg.includes("credentials") ? "Error de credenciales. Contacte al administrador." : "Error al procesar la cola. Intente de nuevo.",
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

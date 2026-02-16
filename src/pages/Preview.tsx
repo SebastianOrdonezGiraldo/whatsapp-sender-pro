@@ -3,12 +3,23 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, CheckCircle2, XCircle, Copy, Loader2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import type { ParsedRow } from '@/lib/xls-parser';
 import { getCarrierDisplayName } from '@/lib/carrier-detection';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { getSecurityHeaders } from '@/config/security';
+import { getEdgeErrorMessage, getEdgeErrorMessageSync } from '@/lib/error-utils';
 
 type RowCategory = 'valid' | 'invalid' | 'duplicate';
 
@@ -27,48 +38,24 @@ interface SendWhatsAppPayload {
 }
 
 async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
-  try {
-    // Ensure we have a valid session (triggers auto-refresh if expired)
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      throw new Error('No hay sesión activa. Por favor inicia sesión nuevamente.');
-    }
-
-    const securityHeaders = getSecurityHeaders();
-
-    // Use supabase.functions.invoke() which handles auth headers and token refresh automatically
-    const { data, error } = await supabase.functions.invoke('enqueue-messages', {
-      body: payload,
-      headers: securityHeaders,
-    });
-
-    if (error) {
-      console.error('Error en Edge Function:', error);
-
-      // Try to extract detailed error message from function response
-      let errorMsg = 'Error invocando función de envío';
-      try {
-        if ('context' in error) {
-          const errorWithContext = error as { context: Response };
-          const ctx = await errorWithContext.context.json();
-          errorMsg = ctx?.message || ctx?.error || errorMsg;
-        } else {
-          errorMsg = error.message || errorMsg;
-        }
-      } catch {
-        errorMsg = error.message || errorMsg;
-      }
-
-      throw new Error(errorMsg);
-    }
-
-    return data;
-  } catch (error) {
-    if ((error as Error).message?.includes('API Key no configurada')) {
-      throw new Error('Error de configuración. Contacte al administrador del sistema.');
-    }
-    throw error;
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error('No hay sesión activa. Por favor inicia sesión nuevamente.');
   }
+
+  const securityHeaders = getSecurityHeaders();
+  const { data, error } = await supabase.functions.invoke('enqueue-messages', {
+    body: payload,
+    headers: securityHeaders,
+  });
+
+  if (error) {
+    console.error('Error en Edge Function:', error);
+    const errorMsg = await getEdgeErrorMessage(error, 'Error al encolar los mensajes. Intente de nuevo.');
+    throw new Error(errorMsg);
+  }
+
+  return data;
 }
 
 export default function PreviewPage() {
@@ -79,6 +66,7 @@ export default function PreviewPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [activeTab, setActiveTab] = useState<RowCategory | 'all'>('all');
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     const raw = sessionStorage.getItem('wa-preview-data');
@@ -146,24 +134,27 @@ export default function PreviewPage() {
 
   const filteredRows = activeTab === 'all' ? rows : rows.filter(r => r.category === activeTab);
   const sendableCount = counts.valid + counts.duplicate;
+  const sendableRows = rows.filter(r => r.category === 'valid' || r.category === 'duplicate');
 
-  async function handleSend() {
-    const sendableRows = rows.filter(r => r.category === 'valid' || r.category === 'duplicate');
-    if (sendableRows.length === 0) {
+  const handleSendClick = () => {
+    if (sendableCount === 0) {
       toast.error('No hay filas válidas para enviar');
       return;
     }
+    setConfirmOpen(true);
+  };
 
+  async function handleConfirmSend() {
+    if (sendableRows.length === 0) return;
+    setConfirmOpen(false);
     setSending(true);
 
     try {
-      // Get current user
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) {
         throw new Error('No se pudo obtener el usuario autenticado');
       }
 
-      // Create job with user_id
       const { data: job, error: jobError } = await supabase
         .from('jobs')
         .insert({
@@ -181,28 +172,51 @@ export default function PreviewPage() {
 
       if (jobError || !job) throw new Error(jobError?.message || 'Error creando job');
 
-      const data = await invokeSendWhatsApp({
-        jobId: job.id,
-        rows: sendableRows.map(r => ({
-          phone_e164: r.phoneE164,
-          guide_number: r.guideNumber,
-          recipient_name: r.recipient,
-        })),
-        autoProcess: true,
-      });
+      const jobId = job.id;
 
-      const processed = data?.processResult;
-      if (processed) {
-        toast.success(`Envío completado: ${processed.sent || 0} enviados, ${processed.failed || 0} fallidos`);
-      } else {
-        toast.success(`${data?.enqueued || 0} mensajes encolados para envío`);
+      try {
+        const data = await invokeSendWhatsApp({
+          jobId,
+          rows: sendableRows.map(r => ({
+            phone_e164: r.phoneE164,
+            guide_number: r.guideNumber,
+            recipient_name: r.recipient,
+          })),
+          autoProcess: true,
+        });
+
+        const processed = data?.processResult;
+        const processTriggerError = data?.processTriggerError;
+
+        if (processTriggerError) {
+          toast.warning(
+            `${data?.enqueued ?? sendableRows.length} mensajes encolados. Use "Procesar cola" en esta página para iniciar el envío.`,
+            { duration: 6000 }
+          );
+        } else if (processed) {
+          toast.success(`Listo: ${processed.sent || 0} enviados, ${processed.failed || 0} fallidos. Puede reintentar los fallidos aquí.`);
+        } else {
+          toast.success(`${data?.enqueued || 0} mensajes encolados. El envío se realiza automáticamente.`);
+        }
+
+        sessionStorage.removeItem('wa-preview-data');
+        sessionStorage.removeItem('wa-preview-filename');
+        sessionStorage.removeItem('wa-assigned-to');
+        navigate(`/history/${jobId}`, { state: { fromSend: true } });
+      } catch (enqueueError) {
+        const message = await getEdgeErrorMessage(enqueueError, 'Error al encolar los mensajes.');
+        toast.error(
+          `El envío se creó pero no se pudieron encolar los mensajes. (${message})`,
+          { duration: 8000 }
+        );
+        navigate(`/history/${jobId}`, { state: { fromSend: true } });
+        sessionStorage.removeItem('wa-preview-data');
+        sessionStorage.removeItem('wa-preview-filename');
+        sessionStorage.removeItem('wa-assigned-to');
       }
-      sessionStorage.removeItem('wa-preview-data');
-      sessionStorage.removeItem('wa-preview-filename');
-      sessionStorage.removeItem('wa-assigned-to');
-      navigate(`/history/${job.id}`);
     } catch (err) {
-      toast.error(`Error: ${(err as Error).message}`);
+      const message = getEdgeErrorMessageSync(err, 'Ha ocurrido un error. Intente de nuevo.');
+      toast.error(message);
     } finally {
       setSending(false);
     }
@@ -244,7 +258,7 @@ export default function PreviewPage() {
           </div>
         </div>
         <Button
-          onClick={handleSend}
+          onClick={handleSendClick}
           disabled={sendableCount === 0 || sending}
           className="h-11 px-6 font-display"
         >
@@ -255,6 +269,28 @@ export default function PreviewPage() {
           )}
         </Button>
       </div>
+
+      {/* Confirmación antes de enviar */}
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Enviar mensajes por WhatsApp?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se enviarán <strong>{sendableCount}</strong> mensaje(s):{' '}
+              {counts.valid > 0 && <>{counts.valid} válidos</>}
+              {counts.valid > 0 && counts.duplicate > 0 && ' y '}
+              {counts.duplicate > 0 && <>{counts.duplicate} duplicados (se reenviarán)</>}.
+              Serás redirigido al detalle del envío para ver el progreso en tiempo real.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void handleConfirmSend()}>
+              Enviar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">

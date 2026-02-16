@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, CheckCircle2, XCircle, MinusCircle, RefreshCw, RotateCcw } from 'lucide-react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { ArrowLeft, Loader2, CheckCircle2, XCircle, MinusCircle, RefreshCw, RotateCcw, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { motion } from 'framer-motion';
 import QueueMonitor from '@/components/QueueMonitor';
 import { toast } from 'sonner';
+import { getEdgeErrorMessage, getWhatsAppFriendlyMessage } from '@/lib/error-utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -55,6 +56,8 @@ interface QueueMessage {
 export default function JobDetailPage() {
   const { jobId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromSend = (location.state as { fromSend?: boolean } | null)?.fromSend === true;
   const [job, setJob] = useState<Job | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [queueMessages, setQueueMessages] = useState<QueueMessage[]>([]);
@@ -69,20 +72,26 @@ export default function JobDetailPage() {
       return;
     }
 
-    const [jobRes, msgRes, queueRes] = await Promise.all([
-      supabase.from('jobs').select('*').eq('id', jobId).maybeSingle(),
-      supabase.from('sent_messages').select('*').eq('job_id', jobId).order('created_at'),
-      supabase.from('message_queue').select('*').eq('job_id', jobId).order('created_at'),
-    ]);
-    const jobData = jobRes.data as unknown as Job | null;
-    const messagesData = (msgRes.data ?? []) as unknown as Message[];
-    const queueData = (queueRes.data ?? []) as unknown as QueueMessage[];
+    try {
+      const [jobRes, msgRes, queueRes] = await Promise.all([
+        supabase.from('jobs').select('*').eq('id', jobId).maybeSingle(),
+        supabase.from('sent_messages').select('*').eq('job_id', jobId).order('created_at'),
+        supabase.from('message_queue').select('*').eq('job_id', jobId).order('created_at'),
+      ]);
+      const jobData = jobRes.data as unknown as Job | null;
+      const messagesData = (msgRes.data ?? []) as unknown as Message[];
+      const queueData = (queueRes.data ?? []) as unknown as QueueMessage[];
 
-    setJob(jobData);
-    setMessages(messagesData);
-    setQueueMessages(queueData);
-    setLoading(false);
-    setRefreshing(false);
+      setJob(jobData);
+      setMessages(messagesData);
+      setQueueMessages(queueData);
+    } catch (err) {
+      console.error('Error al actualizar:', err);
+      toast.error('No se pudo actualizar los datos.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   };
 
   useEffect(() => {
@@ -159,7 +168,8 @@ export default function JobDetailPage() {
 
       if (processError) {
         console.error('Error al procesar cola:', processError);
-        toast.warning('Mensajes marcados para reintento. Procesamiento iniciado.');
+        const msg = await getEdgeErrorMessage(processError, 'No se pudo iniciar el procesamiento.');
+        toast.warning(`Mensajes marcados para reintento. ${msg}`);
       } else {
         toast.success('Procesamiento de reintentos iniciado');
       }
@@ -168,7 +178,8 @@ export default function JobDetailPage() {
       await fetchData();
     } catch (error) {
       console.error('Error al reintentar:', error);
-      toast.error(`Error: ${(error as Error).message}`);
+      const msg = await getEdgeErrorMessage(error, 'Error al reintentar mensajes fallidos.');
+      toast.error(msg);
     } finally {
       setRetrying(false);
     }
@@ -198,7 +209,7 @@ export default function JobDetailPage() {
       msg.recipient_name,
       msg.phone_e164,
       msg.guide_number,
-      msg.error_message || '',
+      getWhatsAppFriendlyMessage(null, msg.error_message),
     ]);
 
     autoTable(doc, {
@@ -253,8 +264,27 @@ export default function JobDetailPage() {
     { label: 'Fallidos', value: job.sent_failed, className: 'text-destructive' },
   ];
 
+  const isProcessing = job?.status === 'QUEUED' || job?.status === 'PROCESSING';
+
   return (
     <div>
+      {/* Banner: recién enviado o envío en proceso */}
+      {(fromSend || isProcessing) && (
+        <div className="mb-6 flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm">
+          <Info className="w-5 h-5 shrink-0 text-primary mt-0.5" />
+          <div>
+            {fromSend && (
+              <p className="font-medium text-foreground">Envío iniciado</p>
+            )}
+            <p className="text-muted-foreground mt-0.5">
+              {isProcessing
+                ? 'Los mensajes se están enviando automáticamente. Puede usar "Actualizar" para ver el progreso o "Procesar cola" si el envío se pausó.'
+                : 'Puede usar "Actualizar" para ver el estado más reciente o "Reintentar fallidos" si hubo errores.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
@@ -317,7 +347,7 @@ export default function JobDetailPage() {
       {/* Queue Monitor */}
       {queueMessages.length > 0 && jobId && (
         <div className="mb-6">
-          <QueueMonitor jobId={jobId} onStatsUpdate={handleRefresh} />
+          <QueueMonitor jobId={jobId} />
         </div>
       )}
 
@@ -390,7 +420,9 @@ export default function JobDetailPage() {
                   <td className="p-3 font-mono text-xs">{msg.phone_e164}</td>
                   <td className="p-3 font-mono text-xs">{msg.guide_number}</td>
                   <td className="p-3 font-mono text-xs truncate max-w-[120px]">{msg.wa_message_id || '—'}</td>
-                  <td className="p-3 text-xs text-destructive">{msg.error_message || ''}</td>
+                  <td className="p-3 text-xs text-destructive" title={msg.error_message || undefined}>
+                  {getWhatsAppFriendlyMessage(null, msg.error_message)}
+                </td>
                 </motion.tr>
                 );
               })}
@@ -467,8 +499,8 @@ export default function JobDetailPage() {
                             : '—'
                           }
                         </td>
-                        <td className="p-3 text-xs text-destructive max-w-[200px] truncate">
-                          {msg.error_message || ''}
+                        <td className="p-3 text-xs text-destructive max-w-[200px] truncate" title={msg.error_message || undefined}>
+                          {getWhatsAppFriendlyMessage(msg.error_code, msg.error_message)}
                         </td>
                       </motion.tr>
                       );

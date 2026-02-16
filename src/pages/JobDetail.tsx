@@ -8,6 +8,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { motion } from 'framer-motion';
 import QueueMonitor from '@/components/QueueMonitor';
 import { toast } from 'sonner';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface Job {
   id: string;
@@ -61,29 +63,47 @@ export default function JobDetailPage() {
   const [retrying, setRetrying] = useState(false);
 
   const fetchData = async () => {
+    if (!jobId) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     const [jobRes, msgRes, queueRes] = await Promise.all([
-      supabase.from('jobs').select('*').eq('id', jobId!).maybeSingle(),
-      supabase.from('sent_messages').select('*').eq('job_id', jobId!).order('created_at'),
-      supabase.from('message_queue').select('*').eq('job_id', jobId!).order('created_at'),
+      supabase.from('jobs').select('*').eq('id', jobId).maybeSingle(),
+      supabase.from('sent_messages').select('*').eq('job_id', jobId).order('created_at'),
+      supabase.from('message_queue').select('*').eq('job_id', jobId).order('created_at'),
     ]);
-    setJob(jobRes.data as Job | null);
-    setMessages((msgRes.data as Message[]) || []);
-    setQueueMessages((queueRes.data as QueueMessage[]) || []);
+    const jobData = jobRes.data as unknown as Job | null;
+    const messagesData = (msgRes.data ?? []) as unknown as Message[];
+    const queueData = (queueRes.data ?? []) as unknown as QueueMessage[];
+
+    setJob(jobData);
+    setMessages(messagesData);
+    setQueueMessages(queueData);
     setLoading(false);
     setRefreshing(false);
   };
 
   useEffect(() => {
     async function loadInitialData() {
+      if (!jobId) {
+        setLoading(false);
+        return;
+      }
+
       const [jobRes, msgRes] = await Promise.all([
-        supabase.from('jobs').select('id, source_filename, total_rows, valid_rows, invalid_rows, duplicate_rows, sent_ok, sent_failed, status, assigned_to, created_at').eq('id', jobId!).maybeSingle(),
-        supabase.from('sent_messages').select('id, phone_e164, guide_number, recipient_name, status, error_message, wa_message_id, created_at').eq('job_id', jobId!).order('created_at'),
+        supabase.from('jobs').select('id, source_filename, total_rows, valid_rows, invalid_rows, duplicate_rows, sent_ok, sent_failed, status, assigned_to, created_at').eq('id', jobId).maybeSingle(),
+        supabase.from('sent_messages').select('id, phone_e164, guide_number, recipient_name, status, error_message, wa_message_id, created_at').eq('job_id', jobId).order('created_at'),
       ]);
-      setJob(jobRes.data as Job | null);
-      setMessages((msgRes.data as Message[]) || []);
+      const jobData = jobRes.data as unknown as Job | null;
+      const messagesData = (msgRes.data ?? []) as unknown as Message[];
+
+      setJob(jobData);
+      setMessages(messagesData);
       setLoading(false);
     }
-    if (jobId) loadInitialData();
+    loadInitialData();
   }, [jobId]);
 
   const handleRefresh = () => {
@@ -94,11 +114,17 @@ export default function JobDetailPage() {
   const handleRetryFailed = async () => {
     setRetrying(true);
     try {
+      if (!jobId) {
+        toast.error('Job no válido');
+        setRetrying(false);
+        return;
+      }
+
       // Get failed messages from queue
       const { data: failedMessages, error: fetchError } = await supabase
         .from('message_queue')
         .select('id')
-        .eq('job_id', jobId!)
+        .eq('job_id', jobId)
         .eq('status', 'FAILED');
 
       if (fetchError) throw fetchError;
@@ -119,7 +145,7 @@ export default function JobDetailPage() {
           error_message: null,
           error_code: null,
         })
-        .eq('job_id', jobId!)
+        .eq('job_id', jobId)
         .eq('status', 'FAILED');
 
       if (updateError) throw updateError;
@@ -146,6 +172,57 @@ export default function JobDetailPage() {
     } finally {
       setRetrying(false);
     }
+  };
+
+  const handleExportJobPdf = () => {
+    if (!job) return;
+
+    if (messages.length === 0) {
+      toast.error('No hay mensajes para exportar en este envío');
+      return;
+    }
+
+    const doc = new jsPDF('p', 'mm', 'a4');
+
+    doc.setFontSize(16);
+    doc.text('Detalle de envío', 14, 20);
+
+    doc.setFontSize(10);
+    doc.text(`Archivo: ${job.source_filename}`, 14, 28);
+    doc.text(`Fecha: ${new Date(job.created_at).toLocaleString('es-CO')}`, 14, 34);
+
+    const headers = ['Estado', 'Destinatario', 'Celular', 'N° Guía', 'Error'];
+
+    const rows = messages.map((msg) => [
+      msg.status,
+      msg.recipient_name,
+      msg.phone_e164,
+      msg.guide_number,
+      msg.error_message || '',
+    ]);
+
+    autoTable(doc, {
+      head: [headers],
+      body: rows,
+      startY: 40,
+      styles: {
+        fontSize: 8,
+        cellWidth: 'wrap',
+      },
+      headStyles: {
+        fillColor: [15, 23, 42],
+      },
+      columnStyles: {
+        0: { cellWidth: 20 },
+        1: { cellWidth: 35 },
+        2: { cellWidth: 25 },
+        3: { cellWidth: 25 },
+        4: { cellWidth: 70 },
+      },
+    });
+
+    const fileName = `envio-${job.id}.pdf`;
+    doc.save(fileName);
   };
 
   if (loading) {
@@ -197,6 +274,14 @@ export default function JobDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportJobPdf}
+            disabled={messages.length === 0}
+          >
+            Exportar envío a PDF
+          </Button>
           {job.sent_failed > 0 && (
             <Button
               variant="default"
@@ -230,9 +315,9 @@ export default function JobDetailPage() {
       </div>
 
       {/* Queue Monitor */}
-      {queueMessages.length > 0 && (
+      {queueMessages.length > 0 && jobId && (
         <div className="mb-6">
-          <QueueMonitor jobId={jobId!} onStatsUpdate={handleRefresh} />
+          <QueueMonitor jobId={jobId} onStatsUpdate={handleRefresh} />
         </div>
       )}
 
@@ -276,10 +361,16 @@ export default function JobDetailPage() {
             </thead>
             <tbody>
               {messages.map((msg, i) => {
-                const statusClass = msg.status === 'SENT' ? 'status-sent' :
-                  msg.status === 'FAILED' ? 'status-failed' : 'status-pending';
-                const StatusIcon = msg.status === 'SENT' ? CheckCircle2 :
-                  msg.status === 'FAILED' ? XCircle : MinusCircle;
+                let statusClass = 'status-pending';
+                let StatusIcon: typeof CheckCircle2 | typeof XCircle | typeof MinusCircle = MinusCircle;
+
+                if (msg.status === 'SENT') {
+                  statusClass = 'status-sent';
+                  StatusIcon = CheckCircle2;
+                } else if (msg.status === 'FAILED') {
+                  statusClass = 'status-failed';
+                  StatusIcon = XCircle;
+                }
 
                 return (
                 <motion.tr

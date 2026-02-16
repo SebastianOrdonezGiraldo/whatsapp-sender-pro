@@ -120,31 +120,6 @@ export default function HistoryPage() {
       if (!user) throw new Error('Usuario no autenticado');
 
       const userIsAdmin = user.app_metadata?.role === 'admin';
-      if (!userIsAdmin) throw new Error('Solo los administradores pueden eliminar envíos');
-
-      const { error } = await supabase
-        .from('jobs')
-        .delete()
-        .eq('id', jobId);
-      if (error) throw error;
-
-      setJobs((prev) => prev.filter((job) => job.id !== jobId));
-      toast.success('Envío eliminado correctamente');
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Error al eliminar envío';
-      toast.error(message);
-    } finally {
-      setDeletingJobId(null);
-    }
-  };
-
-  const handleDeleteJob = async (jobId: string) => {
-    setDeletingJobId(jobId);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Usuario no autenticado');
-
-      const userIsAdmin = user.app_metadata?.role === 'admin';
       if (!userIsAdmin) {
         throw new Error('Solo los administradores pueden eliminar envíos');
       }

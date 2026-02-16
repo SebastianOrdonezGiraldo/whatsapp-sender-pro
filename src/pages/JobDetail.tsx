@@ -209,7 +209,7 @@ export default function JobDetailPage() {
       msg.recipient_name,
       msg.phone_e164,
       msg.guide_number,
-      getWhatsAppFriendlyMessage(null, msg.error_message),
+      msg.status === 'SENT' || !msg.error_message ? '' : getWhatsAppFriendlyMessage(null, msg.error_message),
     ]);
 
     autoTable(doc, {
@@ -421,7 +421,7 @@ export default function JobDetailPage() {
                   <td className="p-3 font-mono text-xs">{msg.guide_number}</td>
                   <td className="p-3 font-mono text-xs truncate max-w-[120px]">{msg.wa_message_id || '—'}</td>
                   <td className="p-3 text-xs text-destructive" title={msg.error_message || undefined}>
-                  {getWhatsAppFriendlyMessage(null, msg.error_message)}
+                  {msg.status === 'SENT' || !msg.error_message ? '—' : getWhatsAppFriendlyMessage(null, msg.error_message)}
                 </td>
                 </motion.tr>
                 );
@@ -500,7 +500,7 @@ export default function JobDetailPage() {
                           }
                         </td>
                         <td className="p-3 text-xs text-destructive max-w-[200px] truncate" title={msg.error_message || undefined}>
-                          {getWhatsAppFriendlyMessage(msg.error_code, msg.error_message)}
+                          {(msg.status === 'SENT' || (!msg.error_message && !msg.error_code)) ? '—' : getWhatsAppFriendlyMessage(msg.error_code, msg.error_message)}
                         </td>
                       </motion.tr>
                       );

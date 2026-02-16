@@ -79,13 +79,20 @@ export function validateApiKey(req: Request): true | Response {
   return true;
 }
 
+/** Usuario devuelto por Supabase Auth (campos usados en validación) */
+interface AuthUser {
+  id: string;
+  email?: string | null;
+  app_metadata?: { role?: string };
+}
+
 /**
  * Valida el JWT token y devuelve el usuario autenticado
  * 
  * @param req - Request object
  * @returns Usuario autenticado o Response de error
  */
-export async function validateJWT(req: Request): Promise<{ user: any } | Response> {
+export async function validateJWT(req: Request): Promise<{ user: AuthUser } | Response> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   
@@ -132,7 +139,7 @@ export async function validateJWT(req: Request): Promise<{ user: any } | Respons
   }
 
   console.log("✅ Usuario autenticado:", user.email);
-  return { user };
+  return { user: user as AuthUser };
 }
 
 /**

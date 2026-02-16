@@ -50,7 +50,10 @@ serve(async (req) => {
 
     if (!jobId || !rows?.length) {
       return new Response(
-        JSON.stringify({ error: "Missing jobId or rows" }),
+        JSON.stringify({
+          error: "Missing jobId or rows",
+          message: "Faltan datos del envío (job o filas). Recargue la página e intente de nuevo.",
+        }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -90,7 +93,13 @@ serve(async (req) => {
       });
 
     if (insertError) {
-      throw new Error(`Failed to enqueue messages: ${insertError.message}`);
+      return new Response(
+        JSON.stringify({
+          error: insertError.message,
+          message: "No se pudo encolar los mensajes. Intente de nuevo.",
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Update job status
@@ -101,6 +110,7 @@ serve(async (req) => {
 
     // If autoProcess is true, trigger processing
     let processResult = null;
+    let processTriggerError: string | null = null;
     if (autoProcess) {
       try {
         const processResponse = await fetch(
@@ -117,10 +127,13 @@ serve(async (req) => {
 
         if (processResponse.ok) {
           processResult = await processResponse.json();
+        } else {
+          const errBody = await processResponse.json().catch(() => ({}));
+          processTriggerError = errBody?.message || errBody?.error || "Error al iniciar el procesamiento";
         }
       } catch (error) {
         console.error("Failed to trigger auto-processing:", error);
-        // Don't fail the request if auto-processing fails
+        processTriggerError = "No se pudo iniciar el envío automático. Use 'Procesar cola' en el detalle del envío.";
       }
     }
 
@@ -130,13 +143,20 @@ serve(async (req) => {
         jobId,
         status: autoProcess ? "processing" : "queued",
         processResult,
+        processTriggerError,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
     console.error("Error enqueuing messages:", err);
+    const msg = (err as Error).message;
     return new Response(
-      JSON.stringify({ error: (err as Error).message }),
+      JSON.stringify({
+        error: msg,
+        message: msg.includes("ownership") || msg.includes("Job")
+          ? "No tiene permiso para este envío o el trabajo no existe."
+          : "Error al encolar mensajes. Intente de nuevo.",
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

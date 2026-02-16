@@ -26,7 +26,7 @@ describe('detectCarrier', () => {
       expect(result).not.toBeNull();
       expect(result?.carrier).toBe('interrapidisimo');
       expect(result?.displayName).toBe('InterRapidísimo');
-      expect(result?.templateName).toBe('interrapidisimo_tracking_notification');
+      expect(result?.templateName).toBe('interrapidisimo_tracking_notificacion');
     });
 
     it('detects guide numbers with spaces', () => {
@@ -77,7 +77,7 @@ describe('getCarrierInfo', () => {
     const info = getCarrierInfo('interrapidisimo');
     expect(info.carrier).toBe('interrapidisimo');
     expect(info.displayName).toBe('InterRapidísimo');
-    expect(info.templateName).toBe('interrapidisimo_tracking_notification');
+    expect(info.templateName).toBe('interrapidisimo_tracking_notificacion');
     expect(info.trackingUrlTemplate).toBe('https://www.interrapidisimo.com/rastreo/?guia={GUIA}');
   });
 });

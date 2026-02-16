@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Clock, CheckCircle2, XCircle, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { getSecurityHeaders } from '@/config/security';
+import { getEdgeErrorMessage } from '@/lib/error-utils';
 
 interface QueueStats {
   pending: number;
@@ -80,23 +80,14 @@ export default function QueueMonitor({
       });
 
       if (error) {
-        let errorMsg = 'Error procesando cola';
-        try {
-          if ('context' in error) {
-            const ctx = await (error as { context: Response }).context.json();
-            errorMsg = ctx?.message || ctx?.error || errorMsg;
-          } else {
-            errorMsg = error.message || errorMsg;
-          }
-        } catch {
-          errorMsg = error.message || errorMsg;
-        }
+        const errorMsg = await getEdgeErrorMessage(error, 'Error al procesar la cola.');
         throw new Error(errorMsg);
       }
 
       toast.success(data?.message || 'Cola procesada correctamente');
     } catch (err) {
-      toast.error(`Error procesando cola: ${(err as Error).message}`);
+      const message = err instanceof Error ? err.message : 'Error al procesar la cola.';
+      toast.error(message);
     } finally {
       setProcessing(false);
     }

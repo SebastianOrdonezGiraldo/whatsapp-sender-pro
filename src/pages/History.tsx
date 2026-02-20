@@ -289,8 +289,8 @@ export default function HistoryPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold font-display tracking-tight">Historial de Envíos</h2>
-          <p className="text-muted-foreground mt-1 text-sm">
+          <h2 className="text-2xl lg:text-3xl font-bold font-display tracking-tight">Historial de Envíos</h2>
+          <p className="text-muted-foreground mt-1.5 text-sm">
             Revisa y filtra todos tus envíos de WhatsApp
           </p>
         </div>
@@ -328,15 +328,15 @@ export default function HistoryPage() {
       </div>
 
       {/* Filtros */}
-      <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-sm">
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="flex items-center gap-2 text-sm font-medium text-foreground shrink-0">
-            <div className="p-1.5 rounded-lg bg-primary/10">
-              <Filter className="w-4 h-4 text-primary" />
-            </div>
-            Filtros
+      <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-4 sm:p-5 lg:p-6 shadow-sm">
+        <div className="flex items-center gap-2 text-sm font-medium text-foreground mb-4">
+          <div className="p-1.5 rounded-lg bg-primary/10">
+            <Filter className="w-4 h-4 text-primary" />
           </div>
-          <div className="flex-1 min-w-[200px] max-w-md">
+          Filtros
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_auto_auto_auto] gap-4 xl:items-end">
+          <div>
             <label htmlFor="history-search" className="block text-xs font-medium text-muted-foreground mb-1.5">Archivo</label>
             <Input
               id="history-search"
@@ -344,10 +344,10 @@ export default function HistoryPage() {
               placeholder="Nombre del archivo..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-10 rounded-lg border-border/80 bg-background/80 placeholder:text-muted-foreground/70"
+              className="h-10 rounded-lg border-border/80 bg-background/80 placeholder:text-muted-foreground/70 w-full"
             />
           </div>
-          <div className="flex-1 min-w-[200px] max-w-md">
+          <div>
             <label htmlFor="history-guide-phone" className="block text-xs font-medium text-muted-foreground mb-1.5">Guía o teléfono</label>
             <Input
               id="history-guide-phone"
@@ -355,10 +355,10 @@ export default function HistoryPage() {
               placeholder="Ej: 1234567890 o 700..."
               value={guideOrPhoneQuery}
               onChange={(e) => setGuideOrPhoneQuery(e.target.value)}
-              className="h-10 rounded-lg border-border/80 bg-background/80 placeholder:text-muted-foreground/70"
+              className="h-10 rounded-lg border-border/80 bg-background/80 placeholder:text-muted-foreground/70 w-full"
             />
           </div>
-          <div className="w-full sm:w-[180px]">
+          <div>
             <label htmlFor="history-status" className="block text-xs font-medium text-muted-foreground mb-1.5">Estado</label>
             <select
               id="history-status"
@@ -373,39 +373,41 @@ export default function HistoryPage() {
               ))}
             </select>
           </div>
-          <div className="flex items-end gap-2 flex-wrap">
-            <div>
+          <div className="flex gap-2 min-w-0 sm:col-span-2 xl:col-span-1">
+            <div className="flex-1 min-w-0">
               <label htmlFor="history-date-from" className="block text-xs font-medium text-muted-foreground mb-1.5">Desde</label>
               <Input
                 id="history-date-from"
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                className="h-10 w-[140px] rounded-lg border-border/80 bg-background/80"
+                className="h-10 w-full min-w-0 rounded-lg border-border/80 bg-background/80"
               />
             </div>
-            <span className="text-muted-foreground text-sm pb-2.5 hidden sm:inline">—</span>
-            <div>
+            <span className="text-muted-foreground text-sm self-end pb-2.5 hidden sm:inline">—</span>
+            <div className="flex-1 min-w-0">
               <label htmlFor="history-date-to" className="block text-xs font-medium text-muted-foreground mb-1.5">Hasta</label>
               <Input
                 id="history-date-to"
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                className="h-10 w-[140px] rounded-lg border-border/80 bg-background/80"
+                className="h-10 w-full min-w-0 rounded-lg border-border/80 bg-background/80"
               />
             </div>
           </div>
           {hasActiveFilters && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={clearFilters}
-              className="h-10 rounded-lg border-dashed text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            >
-              <X className="w-4 h-4 mr-1.5" />
-              Limpiar
-            </Button>
+            <div className="flex items-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearFilters}
+                className="h-10 rounded-lg border-dashed text-muted-foreground hover:text-foreground hover:bg-muted/50 w-full sm:w-auto"
+              >
+                <X className="w-4 h-4 mr-1.5" />
+                Limpiar
+              </Button>
+            </div>
           )}
         </div>
       </div>
@@ -439,7 +441,7 @@ export default function HistoryPage() {
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: Math.min(i * 0.03, 0.3) }}
-                className="group rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-4 flex items-center gap-4 hover:border-primary/40 hover:shadow-md/5 transition-all duration-200"
+                className="group rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-4 lg:p-5 flex items-center gap-4 hover:border-primary/40 hover:shadow-md hover:bg-card/90 transition-all duration-200"
               >
                 <Link to={`/history/${job.id}`} className="flex items-center justify-between flex-1 min-w-0 gap-4">
                   <div className="flex items-center gap-4 min-w-0">
@@ -455,6 +457,18 @@ export default function HistoryPage() {
                         <Badge variant="outline" className={`text-xs font-normal shrink-0 ${getStatusStyle(job.status)}`}>
                           {getStatusLabel(job.status)}
                         </Badge>
+                        {/* Badges inline en móvil (compactos) */}
+                        <span className="flex sm:hidden gap-1.5">
+                          {job.sent_ok > 0 && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded status-sent">{job.sent_ok}✓</span>
+                          )}
+                          {job.sent_failed > 0 && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded status-failed">{job.sent_failed}✗</span>
+                          )}
+                          {job.duplicate_rows > 0 && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded status-duplicate">{job.duplicate_rows}dup</span>
+                          )}
+                        </span>
                       </div>
                     </div>
                   </div>

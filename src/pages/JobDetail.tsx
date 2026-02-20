@@ -286,29 +286,30 @@ export default function JobDetailPage() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/history')}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+        <div className="flex items-start gap-3 min-w-0">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/history')} className="shrink-0" aria-label="Volver al historial">
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <div>
-            <h2 className="text-2xl font-bold font-display">{job.source_filename}</h2>
-            <p className="text-sm text-muted-foreground">
+          <div className="min-w-0">
+            <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold font-display truncate">{job.source_filename}</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground">
               {new Date(job.created_at).toLocaleString('es-CO')}
               {job.assigned_to && (
-                <span className="ml-3">
+                <span className="block sm:inline sm:ml-3 mt-0.5 sm:mt-0">
                   • Encargado: <span className="font-semibold text-primary">{job.assigned_to}</span>
                 </span>
               )}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap gap-2 shrink-0">
           <Button
             variant="outline"
             size="sm"
             onClick={handleExportJobPdf}
             disabled={messages.length === 0}
+            className="flex-1 sm:flex-none"
           >
             Exportar PDF
           </Button>
@@ -318,6 +319,7 @@ export default function JobDetailPage() {
               size="sm"
               onClick={handleRetryFailed}
               disabled={retrying}
+              className="flex-1 sm:flex-none"
             >
               {retrying ? (
                 <>
@@ -327,7 +329,7 @@ export default function JobDetailPage() {
               ) : (
                 <>
                   <RotateCcw className="w-4 h-4 mr-2" />
-                  Reintentar Fallidos ({job.sent_failed})
+                  Reintentar ({job.sent_failed})
                 </>
               )}
             </Button>
@@ -337,6 +339,7 @@ export default function JobDetailPage() {
             size="sm"
             onClick={handleRefresh}
             disabled={refreshing}
+            className="flex-1 sm:flex-none"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
             Actualizar
@@ -352,7 +355,7 @@ export default function JobDetailPage() {
       )}
 
       {/* Stats grid */}
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 sm:gap-3 mb-6">
         {stats.map(s => (
           <div key={s.label} className="glass-card p-3 text-center">
             <p className={`text-xl font-bold font-display ${s.className}`}>{s.value}</p>
@@ -363,7 +366,8 @@ export default function JobDetailPage() {
 
       {/* Tabs for Messages */}
       <Tabs defaultValue="sent" className="w-full">
-        <TabsList className="mb-4">
+        <div className="overflow-x-auto -mx-1 px-1">
+          <TabsList className="mb-4 w-max min-w-full">
           <TabsTrigger value="sent">
             Mensajes Enviados ({messages.length})
           </TabsTrigger>
@@ -373,20 +377,21 @@ export default function JobDetailPage() {
             </TabsTrigger>
           )}
         </TabsList>
+        </div>
 
         <TabsContent value="sent">
           {/* Messages table */}
       <div className="glass-card overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[min(70vh,600px)]">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/50">
-                <th className="text-left p-3 font-medium text-muted-foreground">Estado</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">Destinatario</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">Celular</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">N° Guía</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">WA ID</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">Error</th>
+            <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm shadow-[0_1px_0_0_hsl(var(--border))]">
+              <tr>
+                <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Estado</th>
+                <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Destinatario</th>
+                <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Celular</th>
+                <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">N° Guía</th>
+                <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">WA ID</th>
+                <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Error</th>
               </tr>
             </thead>
             <tbody>
@@ -408,7 +413,7 @@ export default function JobDetailPage() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: i * 0.01 }}
-                  className="border-b border-border/50 last:border-0"
+                  className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors"
                 >
                   <td className="p-3">
                     <Badge variant="outline" className={statusClass}>
@@ -442,18 +447,18 @@ export default function JobDetailPage() {
           <TabsContent value="queue">
             {/* Queue Messages table */}
             <div className="glass-card overflow-hidden">
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-[min(70vh,600px)]">
                 <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/50">
-                      <th className="text-left p-3 font-medium text-muted-foreground">Estado</th>
-                      <th className="text-left p-3 font-medium text-muted-foreground">Prioridad</th>
-                      <th className="text-left p-3 font-medium text-muted-foreground">Destinatario</th>
-                      <th className="text-left p-3 font-medium text-muted-foreground">Celular</th>
-                      <th className="text-left p-3 font-medium text-muted-foreground">N° Guía</th>
-                      <th className="text-left p-3 font-medium text-muted-foreground">Reintentos</th>
-                      <th className="text-left p-3 font-medium text-muted-foreground">Próximo Intento</th>
-                      <th className="text-left p-3 font-medium text-muted-foreground">Error</th>
+                  <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm shadow-[0_1px_0_0_hsl(var(--border))]">
+                    <tr>
+                      <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Estado</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Prioridad</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Destinatario</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Celular</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">N° Guía</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Reintentos</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Próximo Intento</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Error</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -474,7 +479,7 @@ export default function JobDetailPage() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: i * 0.01 }}
-                        className="border-b border-border/50 last:border-0"
+                        className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors"
                       >
                         <td className="p-3">
                           <Badge variant="outline" className={queueStatus.className}>

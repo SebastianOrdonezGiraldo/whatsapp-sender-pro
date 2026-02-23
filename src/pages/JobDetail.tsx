@@ -167,7 +167,6 @@ export default function JobDetailPage() {
       });
 
       if (processError) {
-        console.error('Error al procesar cola:', processError);
         const msg = await getEdgeErrorMessage(processError, 'No se pudo iniciar el procesamiento.');
         toast.warning(`Mensajes marcados para reintento. ${msg}`);
       } else {
@@ -177,7 +176,6 @@ export default function JobDetailPage() {
       // Refresh data
       await fetchData();
     } catch (error) {
-      console.error('Error al reintentar:', error);
       const msg = await getEdgeErrorMessage(error, 'Error al reintentar mensajes fallidos.');
       toast.error(msg);
     } finally {

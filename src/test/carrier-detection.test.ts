@@ -21,12 +21,31 @@ describe('detectCarrier', () => {
   });
 
   describe('InterRapidísimo detection', () => {
-    it('detects 12-digit guide numbers starting with 700', () => {
+    it('detects 12-digit guide numbers starting with 700 (first 3 digits)', () => {
       const result = detectCarrier('700184198166');
       expect(result).not.toBeNull();
       expect(result?.carrier).toBe('interrapidisimo');
       expect(result?.displayName).toBe('InterRapidísimo');
       expect(result?.templateName).toBe('interrapidisimo_tracking_notificacion');
+    });
+
+    it('detects guide 700184205491 as InterRapidísimo', () => {
+      const result = detectCarrier('700184205491');
+      expect(result).not.toBeNull();
+      expect(result?.carrier).toBe('interrapidisimo');
+      expect(result?.displayName).toBe('InterRapidísimo');
+    });
+
+    it('handles scientific notation from Excel (7.00184E+11)', () => {
+      const result = detectCarrier('7.00184205491E+11');
+      expect(result).not.toBeNull();
+      expect(result?.carrier).toBe('interrapidisimo');
+    });
+
+    it('handles numeric input from Excel', () => {
+      const result = detectCarrier(700184205491);
+      expect(result).not.toBeNull();
+      expect(result?.carrier).toBe('interrapidisimo');
     });
 
     it('detects guide numbers with spaces', () => {

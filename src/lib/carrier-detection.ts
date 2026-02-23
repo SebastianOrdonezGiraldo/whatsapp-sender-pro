@@ -40,23 +40,40 @@ const CARRIERS: Record<Carrier, CarrierInfo> = {
 };
 
 /**
+ * Normalizes guide number for carrier detection.
+ * Handles: strings, numbers (from Excel), scientific notation (e.g. "7.00184E+11").
+ * @returns digits-only string or empty string
+ */
+function normalizeGuideDigits(guideNumber: string | number): string {
+  let str = String(guideNumber ?? '').trim();
+  if (!str) return '';
+
+  // Handle scientific notation (Excel may export long numbers as "7.00184E+11")
+  const sciRegex = /^([+-]?\d*\.?\d+)[eE]([+-]?\d+)$/;
+  if (sciRegex.test(str)) {
+    const num = Number.parseFloat(str);
+    if (!Number.isNaN(num) && num <= Number.MAX_SAFE_INTEGER && num >= 0) {
+      str = String(Math.round(num));
+    }
+  }
+
+  return str.replaceAll(/\D/g, '');
+}
+
+/**
  * Detect carrier based on guide number format
- * 
- * Rules:
+ *
+ * Rules (using first 3 digits for 12-digit guides):
  * - Servientrega: Exactly 10 digits
- * - Deprisa: 12 digits starting with 888
- * - InterRapidísimo: 12 digits starting with 700
- * - Envia: 12 digits NOT starting with 888 or 700
- * 
- * @param guideNumber - The guide/tracking number
+ * - Deprisa: 12 digits, first 3 = 888
+ * - InterRapidísimo: 12 digits, first 3 = 700
+ * - Envia: 12 digits, first 3 NOT 888 or 700
+ *
+ * @param guideNumber - The guide/tracking number (string or number from Excel)
  * @returns CarrierInfo or null if format doesn't match any carrier
  */
-export function detectCarrier(guideNumber: string): CarrierInfo | null {
-  if (!guideNumber) return null;
-
-  // Remove spaces and non-digit characters
-  const cleanGuide = guideNumber.replace(/\D/g, '');
-  
+export function detectCarrier(guideNumber: string | number): CarrierInfo | null {
+  const cleanGuide = normalizeGuideDigits(guideNumber);
   if (!cleanGuide) return null;
 
   // Servientrega: Exactly 10 digits
@@ -64,21 +81,14 @@ export function detectCarrier(guideNumber: string): CarrierInfo | null {
     return CARRIERS.servientrega;
   }
 
-  // 12 digits: Check if Deprisa, InterRapidísimo, or Envia
+  // 12 digits: use first 3 digits to determine carrier
   if (cleanGuide.length === 12) {
-    // Deprisa: Starts with 888
-    if (cleanGuide.startsWith('888')) {
-      return CARRIERS.deprisa;
-    }
-    // InterRapidísimo: Starts with 700
-    if (cleanGuide.startsWith('700')) {
-      return CARRIERS.interrapidisimo;
-    }
-    // Envia: Does NOT start with 888 or 700
+    const prefix3 = cleanGuide.substring(0, 3);
+    if (prefix3 === '888') return CARRIERS.deprisa;
+    if (prefix3 === '700') return CARRIERS.interrapidisimo;
     return CARRIERS.envia;
   }
 
-  // Unknown format
   return null;
 }
 
@@ -87,11 +97,11 @@ export function detectCarrier(guideNumber: string): CarrierInfo | null {
  * @param guideNumber - The guide/tracking number
  * @returns Full tracking URL or null if carrier not detected
  */
-export function getTrackingUrl(guideNumber: string): string | null {
+export function getTrackingUrl(guideNumber: string | number): string | null {
   const carrierInfo = detectCarrier(guideNumber);
   if (!carrierInfo) return null;
 
-  const cleanGuide = guideNumber.replace(/\D/g, '');
+  const cleanGuide = normalizeGuideDigits(guideNumber);
   return carrierInfo.trackingUrlTemplate.replace('{GUIA}', cleanGuide);
 }
 

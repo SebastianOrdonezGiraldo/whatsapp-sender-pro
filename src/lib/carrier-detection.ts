@@ -63,11 +63,11 @@ function normalizeGuideDigits(guideNumber: string | number): string {
 /**
  * Detect carrier based on guide number format
  *
- * Rules (using first 3 digits for 12-digit guides):
+ * Rules (using first 2–3 digits for 12-digit guides):
  * - Servientrega: Exactly 10 digits
  * - Deprisa: 12 digits, first 3 = 888
- * - InterRapidísimo: 12 digits, first 3 = 700
- * - Envia: 12 digits, first 3 NOT 888 or 700
+ * - InterRapidísimo: 12 digits, first 3 = 700 or first 2 = 76 (e.g. 760000488530)
+ * - Envia: 12 digits, first 3 NOT 888 or 700, and NOT starting with 76
  *
  * @param guideNumber - The guide/tracking number (string or number from Excel)
  * @returns CarrierInfo or null if format doesn't match any carrier
@@ -81,11 +81,12 @@ export function detectCarrier(guideNumber: string | number): CarrierInfo | null 
     return CARRIERS.servientrega;
   }
 
-  // 12 digits: use first 3 digits to determine carrier
+  // 12 digits: use first 2–3 digits to determine carrier
   if (cleanGuide.length === 12) {
     const prefix3 = cleanGuide.substring(0, 3);
+    const prefix2 = cleanGuide.substring(0, 2);
     if (prefix3 === '888') return CARRIERS.deprisa;
-    if (prefix3 === '700') return CARRIERS.interrapidisimo;
+    if (prefix3 === '700' || prefix2 === '76') return CARRIERS.interrapidisimo;
     return CARRIERS.envia;
   }
 

@@ -48,6 +48,13 @@ describe('detectCarrier', () => {
       expect(result?.carrier).toBe('interrapidisimo');
     });
 
+    it('detects guide numbers starting with 76 (e.g. 760000488530)', () => {
+      const result = detectCarrier('760000488530');
+      expect(result).not.toBeNull();
+      expect(result?.carrier).toBe('interrapidisimo');
+      expect(result?.displayName).toBe('InterRapidísimo');
+    });
+
     it('detects guide numbers with spaces', () => {
       const result = detectCarrier('700 184 198 166');
       expect(result).not.toBeNull();
@@ -73,6 +80,25 @@ describe('detectCarrier', () => {
       const result = detectCarrier('701123456789');
       expect(result).not.toBeNull();
       expect(result?.carrier).toBe('envia');
+    });
+  });
+
+  describe('Parámetros verificados (casos de uso reales)', () => {
+    it('detecta correctamente todas las transportadoras según guías de referencia', () => {
+      const casos = [
+        { guia: '2258298191', esperado: 'servientrega' },
+        { guia: '3012241226', esperado: 'servientrega' },
+        { guia: '957000255300', esperado: 'envia' },
+        { guia: '888004907296', esperado: 'deprisa' },
+        { guia: '700184205491', esperado: 'interrapidisimo' },
+        { guia: '760000488530', esperado: 'interrapidisimo' },
+      ] as const;
+
+      for (const { guia, esperado } of casos) {
+        const result = detectCarrier(guia);
+        expect(result, `Guía ${guia} debería ser ${esperado}`).not.toBeNull();
+        expect(result?.carrier, `Guía ${guia}`).toBe(esperado);
+      }
     });
   });
 

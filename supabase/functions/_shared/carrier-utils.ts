@@ -33,7 +33,7 @@ const CARRIERS: Record<Carrier, CarrierConfig> = {
   },
   interrapidisimo: {
     carrier: 'interrapidisimo',
-    templateName: 'interrapidisimo_tracking_notificacion',
+    templateName: 'interrapidisimo_tracking_notification',
     trackingUrlTemplate: 'https://www.interrapidisimo.com/rastreo/?guia={GUIA}',
     displayName: 'InterRapidísimo',
   },
@@ -67,11 +67,11 @@ export function detectCarrier(guideNumber: string): CarrierConfig | null {
     if (cleanGuide.startsWith('888')) {
       return CARRIERS.deprisa;
     }
-    // InterRapidísimo: Starts with 700
-    if (cleanGuide.startsWith('700')) {
+    // InterRapidísimo: Starts with 700 o 76
+    if (cleanGuide.startsWith('700') || cleanGuide.startsWith('76')) {
       return CARRIERS.interrapidisimo;
     }
-    // Envia: Does NOT start with 888 or 700
+    // Envia: Does NOT start with 888, 700 or 76
     return CARRIERS.envia;
   }
 

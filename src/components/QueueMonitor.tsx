@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import { toast } from 'sonner';
 import { getSecurityHeaders } from '@/config/security';
 import { getEdgeErrorMessage } from '@/lib/error-utils';
@@ -40,9 +41,10 @@ export default function QueueMonitor({
 
     const fetchStats = async () => {
       try {
-        const { data, error } = await supabase.rpc('get_job_queue_stats', {
-          job_uuid: jobId,
-        });
+        const { data, error } = await supabase.rpc(
+          'get_job_queue_stats' as keyof Database['public']['Functions'],
+          { job_uuid: jobId }
+        );
 
         if (error) throw error;
 

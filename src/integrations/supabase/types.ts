@@ -227,7 +227,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_job_queue_stats: {
+        Args: {
+          job_uuid: string
+        }
+        Returns: {
+          pending: number
+          processing: number
+          sent: number
+          failed: number
+          retrying: number
+          total: number
+        }
+      }
     }
     Enums: {
       [_ in never]: never

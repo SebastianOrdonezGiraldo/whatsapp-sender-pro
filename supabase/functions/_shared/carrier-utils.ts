@@ -52,7 +52,7 @@ export function detectCarrier(guideNumber: string): CarrierConfig | null {
   if (!guideNumber) return null;
 
   // Remove spaces and non-digit characters
-  const cleanGuide = guideNumber.replace(/\D/g, '');
+  const cleanGuide = guideNumber.replaceAll(/\D/g, '');
   
   if (!cleanGuide) return null;
 
@@ -84,7 +84,7 @@ export function detectCarrier(guideNumber: string): CarrierConfig | null {
  */
 export function getTrackingUrl(guideNumber: string, carrier?: CarrierConfig | null): string {
   const carrierConfig = carrier || detectCarrier(guideNumber) || CARRIERS.servientrega;
-  const cleanGuide = guideNumber.replace(/\D/g, '');
+  const cleanGuide = guideNumber.replaceAll(/\D/g, '');
   return carrierConfig.trackingUrlTemplate.replace('{GUIA}', cleanGuide);
 }
 

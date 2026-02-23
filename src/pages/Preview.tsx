@@ -38,15 +38,18 @@ interface SendWhatsAppPayload {
 }
 
 async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (userError || !user) {
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session?.access_token) {
     throw new Error('No hay sesión activa. Por favor inicia sesión nuevamente.');
   }
 
-  const securityHeaders = getSecurityHeaders();
+  const headers = {
+    ...getSecurityHeaders(),
+    Authorization: `Bearer ${session.access_token}`,
+  };
   const { data, error } = await supabase.functions.invoke('enqueue-messages', {
     body: payload,
-    headers: securityHeaders,
+    headers,
   });
 
   if (error) {

@@ -72,11 +72,20 @@ export default function QueueMonitor({
   const handleProcessQueue = async () => {
     setProcessing(true);
     try {
-      const securityHeaders = getSecurityHeaders();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast.error('Sesión expirada. Por favor inicia sesión nuevamente.');
+        return;
+      }
+
+      const headers = {
+        ...getSecurityHeaders(),
+        Authorization: `Bearer ${session.access_token}`,
+      };
 
       const { data, error } = await supabase.functions.invoke('process-message-queue', {
         body: { jobId },
-        headers: securityHeaders,
+        headers,
       });
 
       if (error) {

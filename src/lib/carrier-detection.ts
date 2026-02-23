@@ -81,12 +81,10 @@ export function detectCarrier(guideNumber: string | number): CarrierInfo | null 
     return CARRIERS.servientrega;
   }
 
-  // 12 digits: use first 2–3 digits to determine carrier
+  // 12 digits: use first 2–3 digits to determine carrier (76 antes que 700)
   if (cleanGuide.length === 12) {
-    const prefix3 = cleanGuide.substring(0, 3);
-    const prefix2 = cleanGuide.substring(0, 2);
-    if (prefix3 === '888') return CARRIERS.deprisa;
-    if (prefix3 === '700' || prefix2 === '76') return CARRIERS.interrapidisimo;
+    if (cleanGuide.startsWith('888')) return CARRIERS.deprisa;
+    if (cleanGuide.startsWith('76') || cleanGuide.startsWith('700')) return CARRIERS.interrapidisimo;
     return CARRIERS.envia;
   }
 

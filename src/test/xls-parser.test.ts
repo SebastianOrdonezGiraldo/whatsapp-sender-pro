@@ -111,6 +111,22 @@ describe('parseXlsFile', () => {
     });
   });
 
+  it('detecta InterRapidísimo para guías 76x (760000488530)', () => {
+    const headers = ['Número de Guía', 'Destinatario', 'Número de Celular', 'Estado'];
+    const data = [['760000488530', 'Cliente 76', '3201234567', 'Impreso']];
+
+    const workbook = XLSX.utils.book_new();
+    const sheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Reporte');
+
+    const result = parseXlsFile(toArrayBuffer(workbook));
+
+    expect(result.errors).toEqual([]);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].carrier).toBe('interrapidisimo');
+    expect(result.rows[0].guideNumber).toBe('760000488530');
+  });
+
   it('detecta InterRapidísimo para guía 700184205491', () => {
     const headers = ['Número de Guía', 'Destinatario', 'Número de Celular', 'Estado'];
     const data = [

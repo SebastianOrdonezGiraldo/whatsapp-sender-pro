@@ -40,43 +40,48 @@ const CARRIERS: Record<Carrier, CarrierConfig> = {
 };
 
 /**
+ * Normalizes guide number for carrier detection.
+ * Handles scientific notation (e.g. "7.00184E+11" from Excel).
+ */
+function normalizeGuideDigits(guideNumber: string): string {
+  let str = String(guideNumber ?? '').trim();
+  if (!str) return '';
+
+  const sciRegex = /^([+-]?\d*\.?\d+)[eE]([+-]?\d+)$/;
+  if (sciRegex.test(str)) {
+    const num = Number.parseFloat(str);
+    if (!Number.isNaN(num) && num <= Number.MAX_SAFE_INTEGER && num >= 0) {
+      str = String(Math.round(num));
+    }
+  }
+
+  return str.replace(/\D/g, '');
+}
+
+/**
  * Detect carrier based on guide number format
- * 
- * Rules:
+ *
+ * Rules (misma lógica que frontend):
  * - Servientrega: Exactly 10 digits
- * - Deprisa: 12 digits starting with 888
- * - InterRapidísimo: 12 digits starting with 700
- * - Envia: 12 digits NOT starting with 888 or 700
+ * - Deprisa: 12 digits, first 3 = 888
+ * - InterRapidísimo: 12 digits, first 2 = 76 or first 3 = 700
+ * - Envia: 12 digits, resto
  */
 export function detectCarrier(guideNumber: string): CarrierConfig | null {
-  if (!guideNumber) return null;
-
-  // Remove spaces and non-digit characters
-  const cleanGuide = guideNumber.replace(/\D/g, '');
-  
+  const cleanGuide = normalizeGuideDigits(guideNumber);
   if (!cleanGuide) return null;
 
-  // Servientrega: Exactly 10 digits
   if (cleanGuide.length === 10) {
     return CARRIERS.servientrega;
   }
 
-  // 12 digits: Check if Deprisa, InterRapidísimo, or Envia
   if (cleanGuide.length === 12) {
-    // Deprisa: Starts with 888
-    if (cleanGuide.startsWith('888')) {
-      return CARRIERS.deprisa;
-    }
-    // InterRapidísimo: Starts with 700
-    if (cleanGuide.startsWith('700')) {
-      return CARRIERS.interrapidisimo;
-    }
-    // Envia: Does NOT start with 888 or 700
+    if (cleanGuide.startsWith('888')) return CARRIERS.deprisa;
+    if (cleanGuide.startsWith('76') || cleanGuide.startsWith('700')) return CARRIERS.interrapidisimo;
     return CARRIERS.envia;
   }
 
-  // Unknown format - default to servientrega for backwards compatibility
-  return CARRIERS.servientrega;
+  return CARRIERS.servientrega; // backwards compatibility
 }
 
 /**
@@ -84,7 +89,7 @@ export function detectCarrier(guideNumber: string): CarrierConfig | null {
  */
 export function getTrackingUrl(guideNumber: string, carrier?: CarrierConfig | null): string {
   const carrierConfig = carrier || detectCarrier(guideNumber) || CARRIERS.servientrega;
-  const cleanGuide = guideNumber.replace(/\D/g, '');
+  const cleanGuide = normalizeGuideDigits(guideNumber);
   return carrierConfig.trackingUrlTemplate.replace('{GUIA}', cleanGuide);
 }
 

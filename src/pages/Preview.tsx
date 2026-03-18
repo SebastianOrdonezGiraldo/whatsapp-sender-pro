@@ -206,12 +206,20 @@ export default function PreviewPage() {
         sessionStorage.removeItem('wa-assigned-to');
         navigate(`/history/${jobId}`, { state: { fromSend: true } });
       } catch (enqueueError) {
+        const { error: markFailedError } = await supabase
+          .from('jobs')
+          .update({ status: 'FAILED_ENQUEUE' })
+          .eq('id', jobId);
+        if (markFailedError) {
+          console.error('No se pudo marcar el job como FAILED_ENQUEUE desde frontend:', markFailedError);
+        }
+
         const message = await getEdgeErrorMessage(enqueueError, 'Error al encolar los mensajes.');
         toast.error(
-          `El envío se creó pero no se pudieron encolar los mensajes. (${message})`,
+          `El envío se creó pero no se pudieron encolar los mensajes. Se marcó como FALLIDO_ENCOLADO. (${message})`,
           { duration: 8000 }
         );
-        navigate(`/history/${jobId}`, { state: { fromSend: true } });
+        navigate(`/history/${jobId}`, { state: { enqueueFailed: true } });
         sessionStorage.removeItem('wa-preview-data');
         sessionStorage.removeItem('wa-preview-filename');
         sessionStorage.removeItem('wa-assigned-to');

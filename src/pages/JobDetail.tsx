@@ -58,7 +58,9 @@ export default function JobDetailPage() {
   const { jobId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const fromSend = (location.state as { fromSend?: boolean } | null)?.fromSend === true;
+  const locationState = (location.state as { fromSend?: boolean; enqueueFailed?: boolean } | null);
+  const fromSend = locationState?.fromSend === true;
+  const enqueueFailedFromNavigation = locationState?.enqueueFailed === true;
   const [job, setJob] = useState<Job | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [queueMessages, setQueueMessages] = useState<QueueMessage[]>([]);
@@ -267,19 +269,31 @@ export default function JobDetailPage() {
   ];
 
   const isProcessing = job?.status === 'QUEUED' || job?.status === 'PROCESSING';
+  const isEnqueueFailed = job?.status === 'FAILED_ENQUEUE';
 
   return (
     <div>
       {/* Banner: recién enviado o envío en proceso */}
-      {(fromSend || isProcessing) && (
-        <div className="mb-6 flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm">
-          <Info className="w-5 h-5 shrink-0 text-primary mt-0.5" />
+      {(fromSend || isProcessing || enqueueFailedFromNavigation || isEnqueueFailed) && (
+        <div
+          className={`mb-6 flex items-start gap-3 rounded-lg border p-4 text-sm ${
+            isEnqueueFailed || enqueueFailedFromNavigation
+              ? 'border-destructive/30 bg-destructive/5'
+              : 'border-primary/30 bg-primary/5'
+          }`}
+        >
+          <Info className={`w-5 h-5 shrink-0 mt-0.5 ${isEnqueueFailed || enqueueFailedFromNavigation ? 'text-destructive' : 'text-primary'}`} />
           <div>
-            {fromSend && (
+            {(isEnqueueFailed || enqueueFailedFromNavigation) && (
+              <p className="font-medium text-foreground">No se pudieron encolar los mensajes</p>
+            )}
+            {fromSend && !isEnqueueFailed && !enqueueFailedFromNavigation && (
               <p className="font-medium text-foreground">Envío iniciado</p>
             )}
             <p className="text-muted-foreground mt-0.5">
-              {isProcessing
+              {(isEnqueueFailed || enqueueFailedFromNavigation)
+                ? 'El envío se creó, pero no se pudo cargar la cola. Debe volver al inicio, cargar el archivo e intentar nuevamente.'
+                : isProcessing
                 ? 'Los mensajes se están enviando automáticamente. Puede usar "Actualizar" para ver el progreso o "Procesar cola" si el envío se pausó.'
                 : 'Puede usar "Actualizar" para ver el estado más reciente o "Reintentar fallidos" si hubo errores.'}
             </p>

@@ -122,6 +122,27 @@ function mapInsertErrorToUserMessage(rawError: string): string {
   return "No se pudo encolar los mensajes. Intente de nuevo.";
 }
 
+async function markJobAsFailedEnqueue(
+  supabaseClient: ReturnType<typeof createClient>,
+  jobId: string | null | undefined,
+  reason: string
+) {
+  if (!jobId) {
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from("jobs")
+    .update({ status: "FAILED_ENQUEUE" })
+    .eq("id", jobId);
+
+  if (error) {
+    console.error(`Failed to mark job ${jobId} as FAILED_ENQUEUE (${reason}):`, error);
+  } else {
+    console.warn(`Job ${jobId} marked as FAILED_ENQUEUE (${reason}).`);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return handleCorsOptions();
@@ -140,6 +161,8 @@ serve(async (req) => {
   }
   const { user } = jwtValidation;
 
+  let jobIdForFailure: string | null = null;
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -150,8 +173,9 @@ serve(async (req) => {
     const senderNameEnv = Deno.env.get("SENDER_NAME") || "Import Corporal Medical";
     
     const { jobId, rows, senderName, autoProcess } = (await req.json()) as EnqueueRequest;
+    jobIdForFailure = jobId || null;
 
-    if (!jobId || !rows?.length) {
+    if (!jobId) {
       return new Response(
         JSON.stringify({
           error: "Missing jobId or rows",
@@ -167,16 +191,28 @@ serve(async (req) => {
       return ownershipValidation; // Return error response
     }
 
+    if (!rows?.length) {
+      await markJobAsFailedEnqueue(supabase, jobId, "missing_rows");
+      return new Response(
+        JSON.stringify({
+          error: "Missing rows",
+          message: "No se encontraron filas para encolar. El envío quedó marcado como FALLIDO_ENCOLADO.",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const finalSenderName = senderName || senderNameEnv;
 
     // Normalize rows and remove duplicated keys in the same payload
     const { normalizedRows, duplicatesSkipped, invalidRowsSkipped } = normalizeRows(rows);
 
     if (!normalizedRows.length) {
+      await markJobAsFailedEnqueue(supabase, jobId, "no_valid_rows_after_normalization");
       return new Response(
         JSON.stringify({
           error: "No valid rows to enqueue",
-          message: "No hay filas válidas para encolar. Revise el archivo e intente de nuevo.",
+          message: "No hay filas válidas para encolar. El envío quedó marcado como FALLIDO_ENCOLADO.",
           duplicatesSkipped,
           invalidRowsSkipped,
         }),
@@ -207,6 +243,7 @@ serve(async (req) => {
     }
 
     if (insertError) {
+      await markJobAsFailedEnqueue(supabase, jobId, `queue_upsert_error:${insertError.message}`);
       return new Response(
         JSON.stringify({
           error: insertError.message,
@@ -288,6 +325,20 @@ serve(async (req) => {
     );
   } catch (err) {
     console.error("Error enqueuing messages:", err);
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (supabaseUrl && supabaseKey) {
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        await markJobAsFailedEnqueue(
+          supabase,
+          jobIdForFailure,
+          `unexpected_exception:${(err as Error).message}`
+        );
+      }
+    } catch (markError) {
+      console.error("Failed to mark FAILED_ENQUEUE in catch block:", markError);
+    }
     const msg = (err as Error).message;
     return new Response(
       JSON.stringify({

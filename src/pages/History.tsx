@@ -36,6 +36,7 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'Todos los estados' },
   { value: 'QUEUED', label: 'En cola' },
   { value: 'PROCESSING', label: 'Procesando' },
+  { value: 'FAILED_ENQUEUE', label: 'Falló encolado' },
   { value: 'COMPLETED', label: 'Completado' },
 ];
 
@@ -221,6 +222,7 @@ export default function HistoryPage() {
     switch (status) {
       case 'QUEUED': return 'En cola';
       case 'PROCESSING': return 'Procesando';
+      case 'FAILED_ENQUEUE': return 'Falló encolado';
       case 'COMPLETED': return 'Completado';
       default: return status;
     }
@@ -230,6 +232,7 @@ export default function HistoryPage() {
     switch (status) {
       case 'QUEUED': return 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20';
       case 'PROCESSING': return 'bg-primary/10 text-primary border-primary/20';
+      case 'FAILED_ENQUEUE': return 'status-failed';
       case 'COMPLETED': return 'status-sent';
       default: return 'bg-muted text-muted-foreground border-border';
     }

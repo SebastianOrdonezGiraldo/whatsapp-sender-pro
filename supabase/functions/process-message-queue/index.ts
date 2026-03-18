@@ -262,6 +262,7 @@ serve(async (req) => {
     let sent = 0;
     let failed = 0;
     let retrying = 0;
+    let skippedAlreadyClaimed = 0;
 
     // Calculate delay between messages to respect rate limit
     const delayPerMessage = Math.max(
@@ -270,14 +271,27 @@ serve(async (req) => {
     );
 
     for (const message of messages) {
-      // Mark as processing
-      await supabase
+      // Claim message atomically to avoid duplicate processing in concurrent workers.
+      const { data: claimedRows, error: claimError } = await supabase
         .from("message_queue")
         .update({
           status: "PROCESSING",
           processing_started_at: new Date().toISOString(),
         })
-        .eq("id", message.id);
+        .eq("id", message.id)
+        .in("status", ["PENDING", "RETRYING"])
+        .select("id")
+        .limit(1);
+
+      if (claimError) {
+        console.error(`Failed to claim message ${message.id}:`, claimError);
+        continue;
+      }
+
+      if (!claimedRows || claimedRows.length === 0) {
+        skippedAlreadyClaimed++;
+        continue;
+      }
 
       // Send message
       const result = await sendWhatsAppMessage(
@@ -408,7 +422,8 @@ serve(async (req) => {
         sent,
         failed,
         retrying,
-        message: `Processed ${processed} messages: ${sent} sent, ${failed} failed, ${retrying} retrying`,
+        skippedAlreadyClaimed,
+        message: `Processed ${processed} messages: ${sent} sent, ${failed} failed, ${retrying} retrying, ${skippedAlreadyClaimed} skipped (claimed by another worker)`,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

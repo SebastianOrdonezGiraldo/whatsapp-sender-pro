@@ -9,33 +9,16 @@ import {
   normalizeRows,
   type MessageRow,
 } from "../_shared/enqueue-utils.ts";
+import {
+  markJobAsFailedEnqueue,
+  upsertQueueWithSchemaFallback,
+} from "../_shared/enqueue-flow-utils.ts";
 
 interface EnqueueRequest {
   jobId: string;
   rows: MessageRow[];
   senderName?: string;
   autoProcess?: boolean; // If true, start processing immediately
-}
-
-async function markJobAsFailedEnqueue(
-  supabaseClient: ReturnType<typeof createClient>,
-  jobId: string | null | undefined,
-  reason: string
-) {
-  if (!jobId) {
-    return;
-  }
-
-  const { error } = await supabaseClient
-    .from("jobs")
-    .update({ status: "FAILED_ENQUEUE" })
-    .eq("id", jobId);
-
-  if (error) {
-    console.error(`Failed to mark job ${jobId} as FAILED_ENQUEUE (${reason}):`, error);
-  } else {
-    console.warn(`Job ${jobId} marked as FAILED_ENQUEUE (${reason}).`);
-  }
 }
 
 serve(async (req) => {
@@ -117,32 +100,34 @@ serve(async (req) => {
 
     // Insert into queue (upsert to handle duplicates already existing in DB)
     const queueMessagesWithCarrier = buildQueueMessages(jobId, normalizedRows, finalSenderName, true);
-    let { error: insertError } = await supabase
-      .from("message_queue")
-      .upsert(queueMessagesWithCarrier, {
-        onConflict: "job_id,phone_e164,guide_number",
-        ignoreDuplicates: false,
-      });
+    const queueMessagesWithoutCarrier = buildQueueMessages(jobId, normalizedRows, finalSenderName, false);
+    const queueUpsertResult = await upsertQueueWithSchemaFallback({
+      upsertWithCarrier: async () =>
+        supabase
+          .from("message_queue")
+          .upsert(queueMessagesWithCarrier, {
+            onConflict: "job_id,phone_e164,guide_number",
+            ignoreDuplicates: false,
+          }),
+      upsertWithoutCarrier: async () =>
+        supabase
+          .from("message_queue")
+          .upsert(queueMessagesWithoutCarrier, {
+            onConflict: "job_id,phone_e164,guide_number",
+            ignoreDuplicates: false,
+          }),
+    });
 
-    // Backward compatibility: retry if old schema does not have optional carrier fields yet
-    if (insertError && (insertError.message.includes('column "carrier"') || insertError.message.includes('column "tracking_url"'))) {
+    if (queueUpsertResult.fallbackUsed) {
       console.warn("message_queue schema without carrier/tracking_url detected. Retrying upsert without optional fields.");
-      const queueMessagesWithoutCarrier = buildQueueMessages(jobId, normalizedRows, finalSenderName, false);
-      const fallbackUpsert = await supabase
-        .from("message_queue")
-        .upsert(queueMessagesWithoutCarrier, {
-          onConflict: "job_id,phone_e164,guide_number",
-          ignoreDuplicates: false,
-        });
-      insertError = fallbackUpsert.error;
     }
 
-    if (insertError) {
-      await markJobAsFailedEnqueue(supabase, jobId, `queue_upsert_error:${insertError.message}`);
+    if (queueUpsertResult.errorMessage) {
+      await markJobAsFailedEnqueue(supabase, jobId, `queue_upsert_error:${queueUpsertResult.errorMessage}`);
       return new Response(
         JSON.stringify({
-          error: insertError.message,
-          message: mapInsertErrorToUserMessage(insertError.message),
+          error: queueUpsertResult.errorMessage,
+          message: mapInsertErrorToUserMessage(queueUpsertResult.errorMessage),
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );

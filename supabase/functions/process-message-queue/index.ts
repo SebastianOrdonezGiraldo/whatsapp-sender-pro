@@ -208,6 +208,7 @@ serve(async (req) => {
     const nowIso = new Date().toISOString();
     const processingStaleMs = Number(Deno.env.get("PROCESSING_STALE_MS") || "300000");
     let recoveredStaleProcessing = 0;
+    const userIsAdmin = user.app_metadata?.role === "admin";
 
     const syncJobFromQueue = async (targetJobId: string): Promise<QueueStats | null> => {
       const { data: queueStatsData, error: queueStatsError } = await supabase.rpc("get_job_queue_stats", {
@@ -302,9 +303,13 @@ serve(async (req) => {
       let q = supabase
         .from("message_queue")
         .select("*, jobs!inner(user_id)")
-        .eq("jobs.user_id", user.id)
         .order("priority", { ascending: true })
         .order("scheduled_at", { ascending: true });
+
+      // Admin can process other users' jobs only when a specific job is requested.
+      if (!userIsAdmin || !jobId) {
+        q = q.eq("jobs.user_id", user.id);
+      }
 
       if (jobId) {
         q = q.eq("job_id", jobId);

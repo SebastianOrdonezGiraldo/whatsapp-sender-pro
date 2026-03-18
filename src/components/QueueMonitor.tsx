@@ -107,6 +107,7 @@ export default function QueueMonitor({
   const completedCount = stats.sent + stats.failed;
   const progressPercentage = stats.total > 0 ? (completedCount / stats.total) * 100 : 0;
   const isProcessing = stats.processing > 0 || stats.pending > 0 || stats.retrying > 0;
+  const canProcessQueue = stats.pending > 0 || stats.retrying > 0 || stats.processing > 0;
 
   return (
     <Card>
@@ -125,7 +126,7 @@ export default function QueueMonitor({
             size="sm"
             variant="outline"
             onClick={handleProcessQueue}
-            disabled={processing || stats.pending === 0}
+            disabled={processing || !canProcessQueue}
           >
             {processing ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />

@@ -77,6 +77,7 @@ export default function QueueMonitor({
       const { data, error } = await supabase.functions.invoke('process-message-queue', {
         body: { jobId },
         headers: securityHeaders,
+        timeout: 30000,
       });
 
       if (error) {

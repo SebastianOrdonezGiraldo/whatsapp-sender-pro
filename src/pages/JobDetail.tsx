@@ -167,6 +167,7 @@ export default function JobDetailPage() {
       const { error: processError } = await supabase.functions.invoke('process-message-queue', {
         body: { jobId },
         headers: securityHeaders,
+        timeout: 30000,
       });
 
       if (processError) {

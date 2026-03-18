@@ -42,6 +42,7 @@ async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
   const { data, error } = await supabase.functions.invoke('enqueue-messages', {
     body: payload,
     headers: securityHeaders,
+    timeout: 20000,
   });
 
   if (error) {

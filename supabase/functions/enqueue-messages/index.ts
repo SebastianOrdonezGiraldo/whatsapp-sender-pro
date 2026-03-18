@@ -226,7 +226,12 @@ serve(async (req) => {
     let processResult = null;
     let processTriggerError: string | null = null;
     if (autoProcess) {
+      let triggerTimeoutId: number | undefined;
       try {
+        const triggerTimeoutMs = Number(Deno.env.get("AUTO_PROCESS_TRIGGER_TIMEOUT_MS") || "3500");
+        const controller = new AbortController();
+        triggerTimeoutId = setTimeout(() => controller.abort(), triggerTimeoutMs);
+
         const processResponse = await fetch(
           `${supabaseUrl}/functions/v1/process-message-queue`,
           {
@@ -236,18 +241,28 @@ serve(async (req) => {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({ jobId }),
+            signal: controller.signal,
           }
         );
 
         if (processResponse.ok) {
-          processResult = await processResponse.json();
+          processResult = await processResponse.json().catch(() => null);
         } else {
           const errBody = await processResponse.json().catch(() => ({}));
           processTriggerError = errBody?.message || errBody?.error || "Error al iniciar el procesamiento";
         }
       } catch (error) {
-        console.error("Failed to trigger auto-processing:", error);
-        processTriggerError = "No se pudo iniciar el envío automático. Use 'Procesar cola' en el detalle del envío.";
+        if (error instanceof DOMException && error.name === "AbortError") {
+          // Trigger request took too long; don't block enqueue response.
+          processTriggerError = "El procesamiento automático tardó en responder. Use 'Procesar cola' en el detalle del envío.";
+        } else {
+          console.error("Failed to trigger auto-processing:", error);
+          processTriggerError = "No se pudo iniciar el envío automático. Use 'Procesar cola' en el detalle del envío.";
+        }
+      } finally {
+        if (triggerTimeoutId) {
+          clearTimeout(triggerTimeoutId);
+        }
       }
     }
 

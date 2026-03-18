@@ -2,8 +2,8 @@ project_id = "YOUR_PROJECT_ID_HERE"
 
 
 [functions.enqueue-messages]
-# JWT authentication required
-verify_jwt = true
+# JWT is validated inside the function (API key + validateJWT helper)
+verify_jwt = false
 
 [functions.process-message-queue]
 # JWT authentication required

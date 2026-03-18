@@ -196,6 +196,9 @@ serve(async (req) => {
     };
 
     const { jobId, maxMessages } = (await req.json().catch(() => ({}))) as ProcessRequest;
+    const nowIso = new Date().toISOString();
+    const processingStaleMs = Number(Deno.env.get("PROCESSING_STALE_MS") || "300000");
+    let recoveredStaleProcessing = 0;
 
     // If jobId is specified, validate ownership
     if (jobId) {
@@ -205,14 +208,29 @@ serve(async (req) => {
       }
     }
 
-    // Build query for pending messages - Only for user's jobs
-    let query = supabase
-      .from("message_queue")
-      .select("*, jobs!inner(user_id)")
-      .eq("jobs.user_id", user.id)
-      .in("status", ["PENDING", "RETRYING"])
-      .order("priority", { ascending: true })
-      .order("scheduled_at", { ascending: true });
+    // Recover stale PROCESSING rows for this job (crashed worker / timeout scenario).
+    if (jobId) {
+      const staleCutoffIso = new Date(Date.now() - processingStaleMs).toISOString();
+      const { data: recoveredRows, error: recoverError } = await supabase
+        .from("message_queue")
+        .update({
+          status: "RETRYING",
+          next_retry_at: nowIso,
+          processing_started_at: null,
+          error_message: "Mensaje recuperado automáticamente tras quedar atascado en PROCESSING.",
+          error_code: "STALE_PROCESSING_RECOVERY",
+        })
+        .eq("job_id", jobId)
+        .eq("status", "PROCESSING")
+        .lt("processing_started_at", staleCutoffIso)
+        .select("id");
+
+      if (recoverError) {
+        console.error(`Failed to recover stale PROCESSING rows for job ${jobId}:`, recoverError);
+      } else {
+        recoveredStaleProcessing = recoveredRows?.length ?? 0;
+      }
+    }
 
     // Filter by specific job if specified
     if (jobId) {
@@ -229,29 +247,68 @@ serve(async (req) => {
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-
-      query = query.eq("job_id", jobId);
     }
 
     // Limit batch size
     const limit = maxMessages ? Math.min(maxMessages, config.batch_size) : config.batch_size;
-    query = query.limit(limit);
+    const baseQueueQuery = () => {
+      let q = supabase
+        .from("message_queue")
+        .select("*, jobs!inner(user_id)")
+        .eq("jobs.user_id", user.id)
+        .order("priority", { ascending: true })
+        .order("scheduled_at", { ascending: true });
 
-    const { data: messages, error: fetchError } = await query;
+      if (jobId) {
+        q = q.eq("job_id", jobId);
+      }
 
-    if (fetchError) {
+      return q;
+    };
+
+    const { data: pendingMessages, error: pendingError } = await baseQueueQuery()
+      .eq("status", "PENDING")
+      .limit(limit);
+
+    if (pendingError) {
       return new Response(
         JSON.stringify({
-          error: fetchError.message,
+          error: pendingError.message,
           message: "No se pudieron cargar los mensajes de la cola. Intente de nuevo.",
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    const messages = [...(pendingMessages ?? [])];
+
+    if (messages.length < limit) {
+      const remaining = limit - messages.length;
+      const { data: retryDueMessages, error: retryFetchError } = await baseQueueQuery()
+        .eq("status", "RETRYING")
+        .lte("next_retry_at", nowIso)
+        .limit(remaining);
+
+      if (retryFetchError) {
+        return new Response(
+          JSON.stringify({
+            error: retryFetchError.message,
+            message: "No se pudieron cargar los reintentos pendientes de la cola. Intente de nuevo.",
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      messages.push(...(retryDueMessages ?? []));
+    }
+
     if (!messages || messages.length === 0) {
       return new Response(
-        JSON.stringify({ processed: 0, message: "No pending messages" }),
+        JSON.stringify({
+          processed: 0,
+          recoveredStaleProcessing,
+          message: "No pending messages",
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -423,7 +480,8 @@ serve(async (req) => {
         failed,
         retrying,
         skippedAlreadyClaimed,
-        message: `Processed ${processed} messages: ${sent} sent, ${failed} failed, ${retrying} retrying, ${skippedAlreadyClaimed} skipped (claimed by another worker)`,
+        recoveredStaleProcessing,
+        message: `Processed ${processed} messages: ${sent} sent, ${failed} failed, ${retrying} retrying, ${skippedAlreadyClaimed} skipped (claimed by another worker), ${recoveredStaleProcessing} stale recovered`,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

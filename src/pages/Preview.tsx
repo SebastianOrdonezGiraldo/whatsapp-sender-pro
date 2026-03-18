@@ -183,6 +183,11 @@ export default function PreviewPage() {
 
         const processed = data?.processResult;
         const processTriggerError = data?.processTriggerError;
+        const hasMorePending = Boolean(processed?.hasMorePending);
+        const remainingInQueue =
+          (processed?.queueStats?.pending || 0) +
+          (processed?.queueStats?.retrying || 0) +
+          (processed?.queueStats?.processing || 0);
         const duplicatesSkipped = Number(data?.duplicatesSkipped || 0);
         const invalidRowsSkipped = Number(data?.invalidRowsSkipped || 0);
         const skippedParts: string[] = [];
@@ -196,7 +201,17 @@ export default function PreviewPage() {
             { duration: 6000 }
           );
         } else if (processed) {
-          toast.success(`Listo: ${processed.sent || 0} enviados, ${processed.failed || 0} fallidos. Puede reintentar los fallidos aquí.${skippedSuffix}`);
+          if (hasMorePending) {
+            const remainingSuffix = remainingInQueue > 0
+              ? ` Quedan ${remainingInQueue} en cola.`
+              : '';
+            toast.warning(
+              `Procesados por ahora: ${processed.sent || 0} enviados, ${processed.failed || 0} fallidos.${remainingSuffix} Use "Procesar cola" para continuar.${skippedSuffix}`,
+              { duration: 7000 }
+            );
+          } else {
+            toast.success(`Listo: ${processed.sent || 0} enviados, ${processed.failed || 0} fallidos. Puede reintentar los fallidos aquí.${skippedSuffix}`);
+          }
         } else {
           toast.success(`${data?.enqueued || 0} mensajes encolados. El envío se realiza automáticamente.${skippedSuffix}`);
         }

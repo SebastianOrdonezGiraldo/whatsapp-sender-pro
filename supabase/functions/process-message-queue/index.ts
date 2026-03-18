@@ -209,14 +209,14 @@ serve(async (req) => {
     const processingStaleMs = Number(Deno.env.get("PROCESSING_STALE_MS") || "300000");
     let recoveredStaleProcessing = 0;
 
-    const syncJobFromQueue = async (targetJobId: string) => {
+    const syncJobFromQueue = async (targetJobId: string): Promise<QueueStats | null> => {
       const { data: queueStatsData, error: queueStatsError } = await supabase.rpc("get_job_queue_stats", {
         job_uuid: targetJobId,
       });
 
       if (queueStatsError || !queueStatsData) {
         console.error(`Failed to load queue stats for job ${targetJobId}:`, queueStatsError);
-        return;
+        return null;
       }
 
       const queueStats = queueStatsData as QueueStats;
@@ -237,6 +237,8 @@ serve(async (req) => {
       if (updateJobError) {
         console.error(`Failed to sync job ${targetJobId} from queue stats:`, updateJobError);
       }
+
+      return queueStats;
     };
 
     // If jobId is specified, validate ownership
@@ -288,8 +290,14 @@ serve(async (req) => {
       }
     }
 
-    // Limit batch size
-    const limit = maxMessages ? Math.min(maxMessages, config.batch_size) : config.batch_size;
+    // Processing loop budget
+    const processLoopMaxRuntimeMs = Number(Deno.env.get("PROCESS_LOOP_MAX_RUNTIME_MS") || "25000");
+    const processStartedAt = Date.now();
+    const requestedMaxMessages = typeof maxMessages === "number" && Number.isFinite(maxMessages) && maxMessages > 0
+      ? Math.floor(maxMessages)
+      : null;
+    let remainingRequestedMessages = requestedMaxMessages;
+
     const baseQueueQuery = () => {
       let q = supabase
         .from("message_queue")
@@ -305,63 +313,12 @@ serve(async (req) => {
       return q;
     };
 
-    const { data: pendingMessages, error: pendingError } = await baseQueueQuery()
-      .eq("status", "PENDING")
-      .limit(limit);
-
-    if (pendingError) {
-      return new Response(
-        JSON.stringify({
-          error: pendingError.message,
-          message: "No se pudieron cargar los mensajes de la cola. Intente de nuevo.",
-        }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const messages = [...(pendingMessages ?? [])];
-
-    if (messages.length < limit) {
-      const remaining = limit - messages.length;
-      const { data: retryDueMessages, error: retryFetchError } = await baseQueueQuery()
-        .eq("status", "RETRYING")
-        .lte("next_retry_at", nowIso)
-        .limit(remaining);
-
-      if (retryFetchError) {
-        return new Response(
-          JSON.stringify({
-            error: retryFetchError.message,
-            message: "No se pudieron cargar los reintentos pendientes de la cola. Intente de nuevo.",
-          }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      messages.push(...(retryDueMessages ?? []));
-    }
-
-    if (!messages || messages.length === 0) {
-      if (jobId) {
-        await syncJobFromQueue(jobId);
-      }
-      return new Response(
-        JSON.stringify({
-          processed: 0,
-          recoveredStaleProcessing,
-          message: "No pending messages",
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log(`Processing ${messages.length} messages...`);
-
     let processed = 0;
     let sent = 0;
     let failed = 0;
     let retrying = 0;
     let skippedAlreadyClaimed = 0;
+    let fetchedAtLeastOneMessage = false;
 
     // Calculate delay between messages to respect rate limit
     const delayPerMessage = Math.max(
@@ -369,103 +326,111 @@ serve(async (req) => {
       config.batch_delay_ms / config.batch_size
     );
 
-    for (const message of messages) {
-      // Claim message atomically to avoid duplicate processing in concurrent workers.
-      const { data: claimedRows, error: claimError } = await supabase
-        .from("message_queue")
-        .update({
-          status: "PROCESSING",
-          processing_started_at: new Date().toISOString(),
-        })
-        .eq("id", message.id)
-        .in("status", ["PENDING", "RETRYING"])
-        .select("id")
-        .limit(1);
-
-      if (claimError) {
-        console.error(`Failed to claim message ${message.id}:`, claimError);
-        continue;
+    while (Date.now() - processStartedAt < processLoopMaxRuntimeMs) {
+      if (remainingRequestedMessages !== null && remainingRequestedMessages <= 0) {
+        break;
       }
 
-      if (!claimedRows || claimedRows.length === 0) {
-        skippedAlreadyClaimed++;
-        continue;
+      const batchLimit = remainingRequestedMessages === null
+        ? config.batch_size
+        : Math.min(config.batch_size, remainingRequestedMessages);
+
+      if (batchLimit <= 0) {
+        break;
       }
 
-      // Send message
-      const result = await sendWhatsAppMessage(
-        message,
-        waToken,
-        waPhoneId,
-        waTemplateName,
-        waTemplateLang,
-        waGraphVersion
-      );
+      const { data: pendingMessages, error: pendingError } = await baseQueueQuery()
+        .eq("status", "PENDING")
+        .limit(batchLimit);
 
-      processed++;
+      if (pendingError) {
+        return new Response(
+          JSON.stringify({
+            error: pendingError.message,
+            message: "No se pudieron cargar los mensajes de la cola. Intente de nuevo.",
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
-      if (result.success) {
-        // Mark as sent
-        await supabase
+      const messages = [...(pendingMessages ?? [])];
+
+      if (messages.length < batchLimit) {
+        const remaining = batchLimit - messages.length;
+        const { data: retryDueMessages, error: retryFetchError } = await baseQueueQuery()
+          .eq("status", "RETRYING")
+          .lte("next_retry_at", nowIso)
+          .limit(remaining);
+
+        if (retryFetchError) {
+          return new Response(
+            JSON.stringify({
+              error: retryFetchError.message,
+              message: "No se pudieron cargar los reintentos pendientes de la cola. Intente de nuevo.",
+            }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        messages.push(...(retryDueMessages ?? []));
+      }
+
+      if (!messages || messages.length === 0) {
+        break;
+      }
+
+      fetchedAtLeastOneMessage = true;
+      console.log(`Processing batch of ${messages.length} messages...`);
+
+      for (const message of messages) {
+        if (Date.now() - processStartedAt >= processLoopMaxRuntimeMs) {
+          break;
+        }
+
+        // Claim message atomically to avoid duplicate processing in concurrent workers.
+        const { data: claimedRows, error: claimError } = await supabase
           .from("message_queue")
           .update({
-            status: "SENT",
-            wa_message_id: result.messageId,
-            processed_at: new Date().toISOString(),
+            status: "PROCESSING",
+            processing_started_at: new Date().toISOString(),
           })
-          .eq("id", message.id);
+          .eq("id", message.id)
+          .in("status", ["PENDING", "RETRYING"])
+          .select("id")
+          .limit(1);
 
-        // Also update sent_messages table
-        await supabase.from("sent_messages").upsert(
-          {
-            job_id: message.job_id,
-            phone_e164: message.phone_e164,
-            guide_number: message.guide_number,
-            recipient_name: message.recipient_name,
-            sender_name: message.sender_name,
-            template_name: waTemplateName,
-            wa_message_id: result.messageId,
-            status: "SENT",
-            error_message: null,
-          },
-          { onConflict: "job_id,phone_e164,guide_number" }
+        if (claimError) {
+          console.error(`Failed to claim message ${message.id}:`, claimError);
+          continue;
+        }
+
+        if (!claimedRows || claimedRows.length === 0) {
+          skippedAlreadyClaimed++;
+          continue;
+        }
+
+        // Send message
+        const result = await sendWhatsAppMessage(
+          message,
+          waToken,
+          waPhoneId,
+          waTemplateName,
+          waTemplateLang,
+          waGraphVersion
         );
 
-        sent++;
-      } else {
-        // Check if we should retry
-        const shouldRetry = message.retry_count < message.max_retries;
+        processed++;
+        if (remainingRequestedMessages !== null) {
+          remainingRequestedMessages = Math.max(0, remainingRequestedMessages - 1);
+        }
 
-        if (shouldRetry) {
-          // Calculate next retry time with exponential backoff
-          const backoffMs = calculateBackoffDelay(
-            message.retry_count,
-            config.retry_delay_base_ms,
-            config.retry_delay_max_ms
-          );
-          const nextRetryAt = new Date(Date.now() + backoffMs).toISOString();
-
+        if (result.success) {
+          // Mark as sent
           await supabase
             .from("message_queue")
             .update({
-              status: "RETRYING",
-              retry_count: message.retry_count + 1,
-              next_retry_at: nextRetryAt,
-              error_message: result.error,
-              error_code: result.errorCode,
-              processed_at: new Date().toISOString(),
-            })
-            .eq("id", message.id);
-
-          retrying++;
-        } else {
-          // Max retries reached, mark as failed
-          await supabase
-            .from("message_queue")
-            .update({
-              status: "FAILED",
-              error_message: result.error,
-              error_code: result.errorCode,
+              status: "SENT",
+              wa_message_id: result.messageId,
               processed_at: new Date().toISOString(),
             })
             .eq("id", message.id);
@@ -479,27 +444,90 @@ serve(async (req) => {
               recipient_name: message.recipient_name,
               sender_name: message.sender_name,
               template_name: waTemplateName,
-              wa_message_id: null,
-              status: "FAILED",
-              error_message: result.error,
+              wa_message_id: result.messageId,
+              status: "SENT",
+              error_message: null,
             },
             { onConflict: "job_id,phone_e164,guide_number" }
           );
 
-          failed++;
+          sent++;
+        } else {
+          // Check if we should retry
+          const shouldRetry = message.retry_count < message.max_retries;
+
+          if (shouldRetry) {
+            // Calculate next retry time with exponential backoff
+            const backoffMs = calculateBackoffDelay(
+              message.retry_count,
+              config.retry_delay_base_ms,
+              config.retry_delay_max_ms
+            );
+            const nextRetryAt = new Date(Date.now() + backoffMs).toISOString();
+
+            await supabase
+              .from("message_queue")
+              .update({
+                status: "RETRYING",
+                retry_count: message.retry_count + 1,
+                next_retry_at: nextRetryAt,
+                error_message: result.error,
+                error_code: result.errorCode,
+                processed_at: new Date().toISOString(),
+              })
+              .eq("id", message.id);
+
+            retrying++;
+          } else {
+            // Max retries reached, mark as failed
+            await supabase
+              .from("message_queue")
+              .update({
+                status: "FAILED",
+                error_message: result.error,
+                error_code: result.errorCode,
+                processed_at: new Date().toISOString(),
+              })
+              .eq("id", message.id);
+
+            // Also update sent_messages table
+            await supabase.from("sent_messages").upsert(
+              {
+                job_id: message.job_id,
+                phone_e164: message.phone_e164,
+                guide_number: message.guide_number,
+                recipient_name: message.recipient_name,
+                sender_name: message.sender_name,
+                template_name: waTemplateName,
+                wa_message_id: null,
+                status: "FAILED",
+                error_message: result.error,
+              },
+              { onConflict: "job_id,phone_e164,guide_number" }
+            );
+
+            failed++;
+          }
+        }
+
+        // Rate limiting delay
+        if (Date.now() - processStartedAt < processLoopMaxRuntimeMs) {
+          await new Promise((resolve) => setTimeout(resolve, delayPerMessage));
         }
       }
-
-      // Rate limiting delay
-      if (processed < messages.length) {
-        await new Promise((resolve) => setTimeout(resolve, delayPerMessage));
-      }
     }
+
+    const runtimeBudgetReached = Date.now() - processStartedAt >= processLoopMaxRuntimeMs;
 
     // Update job statistics if jobId was specified
+    let queueStats: QueueStats | null = null;
     if (jobId) {
-      await syncJobFromQueue(jobId);
+      queueStats = await syncJobFromQueue(jobId);
     }
+
+    const hasMorePending = queueStats
+      ? queueStats.pending > 0 || queueStats.retrying > 0 || queueStats.processing > 0
+      : false;
 
     return new Response(
       JSON.stringify({
@@ -509,7 +537,13 @@ serve(async (req) => {
         retrying,
         skippedAlreadyClaimed,
         recoveredStaleProcessing,
-        message: `Processed ${processed} messages: ${sent} sent, ${failed} failed, ${retrying} retrying, ${skippedAlreadyClaimed} skipped (claimed by another worker), ${recoveredStaleProcessing} stale recovered`,
+        queueStats,
+        hasMorePending,
+        runtimeBudgetReached,
+        requestedLimitReached: remainingRequestedMessages !== null && remainingRequestedMessages <= 0,
+        message: fetchedAtLeastOneMessage
+          ? `Processed ${processed} messages: ${sent} sent, ${failed} failed, ${retrying} retrying, ${skippedAlreadyClaimed} skipped (claimed by another worker), ${recoveredStaleProcessing} stale recovered`
+          : "No pending messages",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

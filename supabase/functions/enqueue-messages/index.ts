@@ -231,25 +231,32 @@ serve(async (req) => {
         const triggerTimeoutMs = Number(Deno.env.get("AUTO_PROCESS_TRIGGER_TIMEOUT_MS") || "3500");
         const controller = new AbortController();
         triggerTimeoutId = setTimeout(() => controller.abort(), triggerTimeoutMs);
+        const userAuthorization = req.headers.get("authorization");
+        const internalApiKey = Deno.env.get("API_KEY");
 
-        const processResponse = await fetch(
-          `${supabaseUrl}/functions/v1/process-message-queue`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${supabaseKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ jobId }),
-            signal: controller.signal,
-          }
-        );
-
-        if (processResponse.ok) {
-          processResult = await processResponse.json().catch(() => null);
+        if (!userAuthorization || !internalApiKey) {
+          processTriggerError = "No se pudo iniciar el envío automático por credenciales internas faltantes. Use 'Procesar cola' en el detalle del envío.";
         } else {
-          const errBody = await processResponse.json().catch(() => ({}));
-          processTriggerError = errBody?.message || errBody?.error || "Error al iniciar el procesamiento";
+          const processResponse = await fetch(
+            `${supabaseUrl}/functions/v1/process-message-queue`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: userAuthorization,
+                "X-API-Key": internalApiKey,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ jobId }),
+              signal: controller.signal,
+            }
+          );
+
+          if (processResponse.ok) {
+            processResult = await processResponse.json().catch(() => null);
+          } else {
+            const errBody = await processResponse.json().catch(() => ({}));
+            processTriggerError = errBody?.message || errBody?.error || "Error al iniciar el procesamiento";
+          }
         }
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {

@@ -19,6 +19,109 @@ interface EnqueueRequest {
   autoProcess?: boolean; // If true, start processing immediately
 }
 
+interface QueueInsertRow {
+  job_id: string;
+  phone_e164: string;
+  guide_number: string;
+  recipient_name: string;
+  sender_name: string;
+  priority: number;
+  status: "PENDING";
+  carrier?: string;
+  tracking_url?: string;
+}
+
+function normalizeRows(rows: MessageRow[]): {
+  normalizedRows: MessageRow[];
+  duplicatesSkipped: number;
+  invalidRowsSkipped: number;
+} {
+  const seen = new Set<string>();
+  const normalizedRows: MessageRow[] = [];
+  let duplicatesSkipped = 0;
+  let invalidRowsSkipped = 0;
+
+  for (const row of rows) {
+    const phone = row.phone_e164?.trim();
+    const guideNumber = row.guide_number?.trim();
+    const recipientName = row.recipient_name?.trim();
+
+    if (!phone || !guideNumber || !recipientName) {
+      invalidRowsSkipped++;
+      continue;
+    }
+
+    const uniqueKey = `${phone}|${guideNumber}`;
+    if (seen.has(uniqueKey)) {
+      duplicatesSkipped++;
+      continue;
+    }
+    seen.add(uniqueKey);
+
+    normalizedRows.push({
+      phone_e164: phone,
+      guide_number: guideNumber,
+      recipient_name: recipientName,
+      priority: typeof row.priority === "number" ? row.priority : 5,
+    });
+  }
+
+  return { normalizedRows, duplicatesSkipped, invalidRowsSkipped };
+}
+
+function buildQueueMessages(
+  jobId: string,
+  rows: MessageRow[],
+  senderName: string,
+  includeCarrierFields = true
+): QueueInsertRow[] {
+  return rows.map((row) => {
+    const carrierInfo = detectCarrier(row.guide_number);
+    const trackingUrl = getTrackingUrl(row.guide_number, carrierInfo);
+
+    const baseRow: QueueInsertRow = {
+      job_id: jobId,
+      phone_e164: row.phone_e164,
+      guide_number: row.guide_number,
+      recipient_name: row.recipient_name,
+      sender_name: senderName,
+      priority: row.priority || 5,
+      status: "PENDING",
+    };
+
+    if (!includeCarrierFields) {
+      return baseRow;
+    }
+
+    return {
+      ...baseRow,
+      carrier: carrierInfo?.carrier || "servientrega",
+      tracking_url: trackingUrl,
+    };
+  });
+}
+
+function mapInsertErrorToUserMessage(rawError: string): string {
+  const error = rawError.toLowerCase();
+
+  if (
+    error.includes("on conflict do update command cannot affect row a second time") ||
+    error.includes("cannot affect row a second time")
+  ) {
+    return "El archivo tiene filas repetidas con el mismo teléfono y guía. Corrija duplicados e intente de nuevo.";
+  }
+
+  if (error.includes('column "carrier"') || error.includes('column "tracking_url"')) {
+    return "La base de datos está desactualizada. Ejecute las migraciones pendientes e intente de nuevo.";
+  }
+
+  if (error.includes("no unique or exclusion constraint matching the on conflict specification")) {
+    return "Falta la restricción única de la cola en la base de datos. Ejecute las migraciones pendientes e intente de nuevo.";
+  }
+
+  return "No se pudo encolar los mensajes. Intente de nuevo.";
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return handleCorsOptions();
@@ -66,37 +169,48 @@ serve(async (req) => {
 
     const finalSenderName = senderName || senderNameEnv;
 
-    // Prepare messages for queue with carrier detection
-    const queueMessages = rows.map((row) => {
-      const carrierInfo = detectCarrier(row.guide_number);
-      const trackingUrl = getTrackingUrl(row.guide_number, carrierInfo);
-      
-      return {
-        job_id: jobId,
-        phone_e164: row.phone_e164,
-        guide_number: row.guide_number,
-        recipient_name: row.recipient_name,
-        sender_name: finalSenderName,
-        carrier: carrierInfo?.carrier || 'servientrega', // default to servientrega
-        tracking_url: trackingUrl,
-        priority: row.priority || 5,
-        status: "PENDING",
-      };
-    });
+    // Normalize rows and remove duplicated keys in the same payload
+    const { normalizedRows, duplicatesSkipped, invalidRowsSkipped } = normalizeRows(rows);
 
-    // Insert into queue (upsert to handle duplicates)
-    const { error: insertError } = await supabase
+    if (!normalizedRows.length) {
+      return new Response(
+        JSON.stringify({
+          error: "No valid rows to enqueue",
+          message: "No hay filas válidas para encolar. Revise el archivo e intente de nuevo.",
+          duplicatesSkipped,
+          invalidRowsSkipped,
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Insert into queue (upsert to handle duplicates already existing in DB)
+    const queueMessagesWithCarrier = buildQueueMessages(jobId, normalizedRows, finalSenderName, true);
+    let { error: insertError } = await supabase
       .from("message_queue")
-      .upsert(queueMessages, {
+      .upsert(queueMessagesWithCarrier, {
         onConflict: "job_id,phone_e164,guide_number",
         ignoreDuplicates: false,
       });
+
+    // Backward compatibility: retry if old schema does not have optional carrier fields yet
+    if (insertError && (insertError.message.includes('column "carrier"') || insertError.message.includes('column "tracking_url"'))) {
+      console.warn("message_queue schema without carrier/tracking_url detected. Retrying upsert without optional fields.");
+      const queueMessagesWithoutCarrier = buildQueueMessages(jobId, normalizedRows, finalSenderName, false);
+      const fallbackUpsert = await supabase
+        .from("message_queue")
+        .upsert(queueMessagesWithoutCarrier, {
+          onConflict: "job_id,phone_e164,guide_number",
+          ignoreDuplicates: false,
+        });
+      insertError = fallbackUpsert.error;
+    }
 
     if (insertError) {
       return new Response(
         JSON.stringify({
           error: insertError.message,
-          message: "No se pudo encolar los mensajes. Intente de nuevo.",
+          message: mapInsertErrorToUserMessage(insertError.message),
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -139,7 +253,10 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        enqueued: rows.length,
+        enqueued: normalizedRows.length,
+        received: rows.length,
+        duplicatesSkipped,
+        invalidRowsSkipped,
         jobId,
         status: autoProcess ? "processing" : "queued",
         processResult,

@@ -187,16 +187,22 @@ export default function PreviewPage() {
 
         const processed = data?.processResult;
         const processTriggerError = data?.processTriggerError;
+        const duplicatesSkipped = Number(data?.duplicatesSkipped || 0);
+        const invalidRowsSkipped = Number(data?.invalidRowsSkipped || 0);
+        const skippedParts: string[] = [];
+        if (duplicatesSkipped > 0) skippedParts.push(`${duplicatesSkipped} duplicadas internas`);
+        if (invalidRowsSkipped > 0) skippedParts.push(`${invalidRowsSkipped} inválidas`);
+        const skippedSuffix = skippedParts.length > 0 ? ` Se omitieron ${skippedParts.join(' y ')}.` : '';
 
         if (processTriggerError) {
           toast.warning(
-            `${data?.enqueued ?? sendableRows.length} mensajes encolados. Use "Procesar cola" en esta página para iniciar el envío.`,
+            `${data?.enqueued ?? sendableRows.length} mensajes encolados. Use "Procesar cola" en esta página para iniciar el envío.${skippedSuffix}`,
             { duration: 6000 }
           );
         } else if (processed) {
-          toast.success(`Listo: ${processed.sent || 0} enviados, ${processed.failed || 0} fallidos. Puede reintentar los fallidos aquí.`);
+          toast.success(`Listo: ${processed.sent || 0} enviados, ${processed.failed || 0} fallidos. Puede reintentar los fallidos aquí.${skippedSuffix}`);
         } else {
-          toast.success(`${data?.enqueued || 0} mensajes encolados. El envío se realiza automáticamente.`);
+          toast.success(`${data?.enqueued || 0} mensajes encolados. El envío se realiza automáticamente.${skippedSuffix}`);
         }
 
         sessionStorage.removeItem('wa-preview-data');

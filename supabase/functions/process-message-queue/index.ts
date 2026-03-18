@@ -386,7 +386,7 @@ serve(async (req) => {
             status: "SENT",
             error_message: null,
           },
-          { onConflict: "phone_e164,guide_number" }
+          { onConflict: "job_id,phone_e164,guide_number" }
         );
 
         sent++;
@@ -441,7 +441,7 @@ serve(async (req) => {
               status: "FAILED",
               error_message: result.error,
             },
-            { onConflict: "phone_e164,guide_number" }
+            { onConflict: "job_id,phone_e164,guide_number" }
           );
 
           failed++;

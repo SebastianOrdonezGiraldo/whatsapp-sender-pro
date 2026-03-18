@@ -3,6 +3,7 @@
  * 
  * Configuración de seguridad de la aplicación
  */
+import { supabase } from '@/integrations/supabase/client';
 
 /**
  * API Key para autenticar requests a Edge Functions
@@ -35,8 +36,25 @@ export const getSecurityHeaders = (): Record<string, string> => {
   };
 };
 
+/**
+ * Headers para Edge Functions con JWT de sesión explícito
+ */
+export const getFunctionHeaders = async (): Promise<Record<string, string>> => {
+  const { data: { session }, error } = await supabase.auth.getSession();
+
+  if (error || !session?.access_token) {
+    throw new Error('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
+  }
+
+  return {
+    ...getSecurityHeaders(),
+    Authorization: `Bearer ${session.access_token}`,
+  };
+};
+
 export default {
   getApiKey,
   getSecurityHeaders,
+  getFunctionHeaders,
 };
 

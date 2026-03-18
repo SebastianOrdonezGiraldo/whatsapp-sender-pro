@@ -9,6 +9,7 @@ import { motion } from 'framer-motion';
 import QueueMonitor from '@/components/QueueMonitor';
 import { toast } from 'sonner';
 import { getEdgeErrorMessage, getWhatsAppFriendlyMessage } from '@/lib/error-utils';
+import { getFunctionHeaders } from '@/config/security';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -162,8 +163,10 @@ export default function JobDetailPage() {
       toast.success(`Reintentando ${failedMessages.length} mensaje(s) fallido(s)...`);
 
       // Trigger processing
+      const securityHeaders = await getFunctionHeaders();
       const { error: processError } = await supabase.functions.invoke('process-message-queue', {
         body: { jobId },
+        headers: securityHeaders,
       });
 
       if (processError) {

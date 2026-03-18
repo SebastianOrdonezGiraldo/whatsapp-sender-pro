@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { getSecurityHeaders } from '@/config/security';
+import { getFunctionHeaders } from '@/config/security';
 import { getEdgeErrorMessage } from '@/lib/error-utils';
 
 interface QueueStats {
@@ -72,7 +72,7 @@ export default function QueueMonitor({
   const handleProcessQueue = async () => {
     setProcessing(true);
     try {
-      const securityHeaders = getSecurityHeaders();
+      const securityHeaders = await getFunctionHeaders();
 
       const { data, error } = await supabase.functions.invoke('process-message-queue', {
         body: { jobId },

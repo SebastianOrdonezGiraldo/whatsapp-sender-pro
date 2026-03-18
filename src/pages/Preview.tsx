@@ -18,7 +18,7 @@ import type { ParsedRow } from '@/lib/xls-parser';
 import { getCarrierDisplayName } from '@/lib/carrier-detection';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { getSecurityHeaders } from '@/config/security';
+import { getFunctionHeaders } from '@/config/security';
 import { getEdgeErrorMessage, getEdgeErrorMessageSync } from '@/lib/error-utils';
 
 type RowCategory = 'valid' | 'invalid' | 'duplicate';
@@ -38,12 +38,7 @@ interface SendWhatsAppPayload {
 }
 
 async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (userError || !user) {
-    throw new Error('No hay sesión activa. Por favor inicia sesión nuevamente.');
-  }
-
-  const securityHeaders = getSecurityHeaders();
+  const securityHeaders = await getFunctionHeaders();
   const { data, error } = await supabase.functions.invoke('enqueue-messages', {
     body: payload,
     headers: securityHeaders,

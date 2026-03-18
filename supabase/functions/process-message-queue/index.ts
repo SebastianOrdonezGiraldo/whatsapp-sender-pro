@@ -36,6 +36,15 @@ interface ProcessRequest {
   maxMessages?: number; // Optional: limit number of messages to process
 }
 
+interface QueueStats {
+  pending: number;
+  processing: number;
+  sent: number;
+  failed: number;
+  retrying: number;
+  total: number;
+}
+
 // Calculate exponential backoff delay
 function calculateBackoffDelay(
   retryCount: number,
@@ -200,6 +209,36 @@ serve(async (req) => {
     const processingStaleMs = Number(Deno.env.get("PROCESSING_STALE_MS") || "300000");
     let recoveredStaleProcessing = 0;
 
+    const syncJobFromQueue = async (targetJobId: string) => {
+      const { data: queueStatsData, error: queueStatsError } = await supabase.rpc("get_job_queue_stats", {
+        job_uuid: targetJobId,
+      });
+
+      if (queueStatsError || !queueStatsData) {
+        console.error(`Failed to load queue stats for job ${targetJobId}:`, queueStatsError);
+        return;
+      }
+
+      const queueStats = queueStatsData as QueueStats;
+      const allProcessed =
+        queueStats.pending === 0 &&
+        queueStats.retrying === 0 &&
+        queueStats.processing === 0;
+
+      const { error: updateJobError } = await supabase
+        .from("jobs")
+        .update({
+          sent_ok: queueStats.sent,
+          sent_failed: queueStats.failed,
+          status: allProcessed ? "COMPLETED" : "PROCESSING",
+        })
+        .eq("id", targetJobId);
+
+      if (updateJobError) {
+        console.error(`Failed to sync job ${targetJobId} from queue stats:`, updateJobError);
+      }
+    };
+
     // If jobId is specified, validate ownership
     if (jobId) {
       const ownershipValidation = await validateJobOwnership(jobId, user.id);
@@ -303,6 +342,9 @@ serve(async (req) => {
     }
 
     if (!messages || messages.length === 0) {
+      if (jobId) {
+        await syncJobFromQueue(jobId);
+      }
       return new Response(
         JSON.stringify({
           processed: 0,
@@ -456,21 +498,7 @@ serve(async (req) => {
 
     // Update job statistics if jobId was specified
     if (jobId) {
-      const { data: queueStats } = await supabase.rpc("get_job_queue_stats", {
-        job_uuid: jobId,
-      });
-
-      if (queueStats) {
-        const allProcessed = queueStats.pending === 0 && queueStats.retrying === 0;
-        await supabase
-          .from("jobs")
-          .update({
-            sent_ok: queueStats.sent,
-            sent_failed: queueStats.failed,
-            status: allProcessed ? "COMPLETED" : "PROCESSING",
-          })
-          .eq("id", jobId);
-      }
+      await syncJobFromQueue(jobId);
     }
 
     return new Response(

@@ -104,15 +104,18 @@ export default function JobDetailPage() {
         return;
       }
 
-      const [jobRes, msgRes] = await Promise.all([
+      const [jobRes, msgRes, queueRes] = await Promise.all([
         supabase.from('jobs').select('id, source_filename, total_rows, valid_rows, invalid_rows, duplicate_rows, sent_ok, sent_failed, status, assigned_to, created_at').eq('id', jobId).maybeSingle(),
         supabase.from('sent_messages').select('id, phone_e164, guide_number, recipient_name, status, error_message, wa_message_id, created_at').eq('job_id', jobId).order('created_at'),
+        supabase.from('message_queue').select('*').eq('job_id', jobId).order('created_at'),
       ]);
       const jobData = jobRes.data as unknown as Job | null;
       const messagesData = (msgRes.data ?? []) as unknown as Message[];
+      const queueData = (queueRes.data ?? []) as unknown as QueueMessage[];
 
       setJob(jobData);
       setMessages(messagesData);
+      setQueueMessages(queueData);
       setLoading(false);
     }
     loadInitialData();

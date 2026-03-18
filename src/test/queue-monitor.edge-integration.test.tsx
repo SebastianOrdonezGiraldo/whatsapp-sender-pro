@@ -104,4 +104,43 @@ describe("QueueMonitor edge integration", () => {
 
     expect(toastSuccessMock).toHaveBeenCalled();
   });
+
+  it("evita doble invocación por doble click rápido en 'Procesar Cola'", async () => {
+    rpcMock.mockResolvedValueOnce({
+      data: {
+        pending: 2,
+        processing: 0,
+        sent: 0,
+        failed: 0,
+        retrying: 0,
+        total: 2,
+      },
+      error: null,
+    });
+
+    let resolveInvoke: ((value: { data: { message: string }; error: null }) => void) | null = null;
+    invokeMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveInvoke = resolve;
+        })
+    );
+
+    render(<QueueMonitor jobId="job-race" autoRefresh={false} />);
+
+    const processButton = await screen.findByRole("button", { name: /procesar cola/i });
+
+    fireEvent.click(processButton);
+    fireEvent.click(processButton);
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledTimes(1);
+    });
+
+    resolveInvoke?.({ data: { message: "ok" }, error: null });
+
+    await waitFor(() => {
+      expect(toastSuccessMock).toHaveBeenCalled();
+    });
+  });
 });

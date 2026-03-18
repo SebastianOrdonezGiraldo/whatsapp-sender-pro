@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Clock, CheckCircle2, XCircle, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,6 +34,7 @@ export default function QueueMonitor({
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const processingRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -70,6 +71,11 @@ export default function QueueMonitor({
   }, [jobId, autoRefresh, refreshInterval, onStatsUpdate]);
 
   const handleProcessQueue = async () => {
+    if (processingRef.current) {
+      return;
+    }
+
+    processingRef.current = true;
     setProcessing(true);
     try {
       const securityHeaders = await getFunctionHeaders();
@@ -90,6 +96,7 @@ export default function QueueMonitor({
       const message = err instanceof Error ? err.message : 'Error al procesar la cola.';
       toast.error(message);
     } finally {
+      processingRef.current = false;
       setProcessing(false);
     }
   };

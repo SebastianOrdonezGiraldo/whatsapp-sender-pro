@@ -4,20 +4,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { detectCarrier, getCarrierConfig, type Carrier } from "../_shared/carrier-utils.ts";
 import { computeNextRetryAt } from "../_shared/retry-utils.ts";
+import {
+  calculateDelayPerMessage,
+  normalizeRateLimitConfig,
+  resolveBatchLimit,
+  resolveRequestedMaxMessages,
+  type RateLimitConfig,
+} from "../_shared/process-queue-utils.ts";
 import { validateApiKey, validateJWT, validateJobOwnership, handleCorsOptions, corsHeaders } from "../_shared/api-key-validator.ts";
 import { getWhatsAppFriendlyMessage } from "../_shared/wa-error-messages.ts";
-
-interface RateLimitConfig {
-  messages_per_second: number;
-  messages_per_minute: number;
-  messages_per_hour: number;
-  batch_size: number;
-  batch_delay_ms: number;
-  retry_delay_base_ms: number;
-  retry_delay_max_ms: number;
-  error_threshold: number;
-  circuit_break_duration_ms: number;
-}
 
 interface QueueMessage {
   id: string;
@@ -187,13 +182,7 @@ serve(async (req) => {
       .limit(1)
       .single();
 
-    const config: RateLimitConfig = rateLimitConfig || {
-      messages_per_second: 80,
-      batch_size: 20,
-      batch_delay_ms: 250,
-      retry_delay_base_ms: 1000,
-      retry_delay_max_ms: 60000,
-    };
+    const config: RateLimitConfig = normalizeRateLimitConfig(rateLimitConfig);
 
     const { jobId, maxMessages } = (await req.json().catch(() => ({}))) as ProcessRequest;
     const nowIso = new Date().toISOString();
@@ -285,9 +274,7 @@ serve(async (req) => {
     // Processing loop budget
     const processLoopMaxRuntimeMs = Number(Deno.env.get("PROCESS_LOOP_MAX_RUNTIME_MS") || "25000");
     const processStartedAt = Date.now();
-    const requestedMaxMessages = typeof maxMessages === "number" && Number.isFinite(maxMessages) && maxMessages > 0
-      ? Math.floor(maxMessages)
-      : null;
+    const requestedMaxMessages = resolveRequestedMaxMessages(maxMessages);
     let remainingRequestedMessages = requestedMaxMessages;
 
     const baseQueueQuery = () => {
@@ -317,19 +304,14 @@ serve(async (req) => {
     let fetchedAtLeastOneMessage = false;
 
     // Calculate delay between messages to respect rate limit
-    const delayPerMessage = Math.max(
-      1000 / config.messages_per_second,
-      config.batch_delay_ms / config.batch_size
-    );
+    const delayPerMessage = calculateDelayPerMessage(config);
 
     while (Date.now() - processStartedAt < processLoopMaxRuntimeMs) {
       if (remainingRequestedMessages !== null && remainingRequestedMessages <= 0) {
         break;
       }
 
-      const batchLimit = remainingRequestedMessages === null
-        ? config.batch_size
-        : Math.min(config.batch_size, remainingRequestedMessages);
+      const batchLimit = resolveBatchLimit(config.batch_size, remainingRequestedMessages);
 
       if (batchLimit <= 0) {
         break;

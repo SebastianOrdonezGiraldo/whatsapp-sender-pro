@@ -3,6 +3,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { detectCarrier, getCarrierConfig, type Carrier } from "../_shared/carrier-utils.ts";
+import { computeNextRetryAt } from "../_shared/retry-utils.ts";
 import { validateApiKey, validateJWT, validateJobOwnership, handleCorsOptions, corsHeaders } from "../_shared/api-key-validator.ts";
 import { getWhatsAppFriendlyMessage } from "../_shared/wa-error-messages.ts";
 
@@ -43,16 +44,6 @@ interface QueueStats {
   failed: number;
   retrying: number;
   total: number;
-}
-
-// Calculate exponential backoff delay
-function calculateBackoffDelay(
-  retryCount: number,
-  baseMs: number,
-  maxMs: number
-): number {
-  const delay = baseMs * Math.pow(2, retryCount);
-  return Math.min(delay, maxMs);
 }
 
 // Send WhatsApp message via Graph API with carrier-specific template
@@ -463,12 +454,12 @@ serve(async (req) => {
 
           if (shouldRetry) {
             // Calculate next retry time with exponential backoff
-            const backoffMs = calculateBackoffDelay(
+            const nextRetryAt = computeNextRetryAt(
+              Date.now(),
               message.retry_count,
               config.retry_delay_base_ms,
               config.retry_delay_max_ms
             );
-            const nextRetryAt = new Date(Date.now() + backoffMs).toISOString();
 
             await supabase
               .from("message_queue")

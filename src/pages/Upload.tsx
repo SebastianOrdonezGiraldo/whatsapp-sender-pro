@@ -8,7 +8,7 @@ import { LIMITS } from '@/config/limits';
 
 // Lista de encargados de bodega
 const WAREHOUSE_STAFF = [
-  'Maria Paula',
+  'Santiago',
   'Daniel',
   'Juan',
   'Miguel',

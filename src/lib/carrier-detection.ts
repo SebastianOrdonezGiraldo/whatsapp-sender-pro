@@ -73,6 +73,8 @@ function normalizeGuideDigits(guideNumber: string | number): string {
  * @returns CarrierInfo or null if format doesn't match any carrier
  */
 export function detectCarrier(guideNumber: string | number): CarrierInfo | null {
+  if (!guideNumber) return null;
+
   const cleanGuide = normalizeGuideDigits(guideNumber);
   if (!cleanGuide) return null;
 

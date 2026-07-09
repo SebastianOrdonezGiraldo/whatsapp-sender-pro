@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Clock, CheckCircle2, XCircle, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { getSecurityHeaders } from '@/config/security';
+import { getFunctionHeaders } from '@/config/security';
 import { getEdgeErrorMessage } from '@/lib/error-utils';
 
 interface QueueStats {
@@ -34,6 +34,7 @@ export default function QueueMonitor({
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const processingRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -70,22 +71,19 @@ export default function QueueMonitor({
   }, [jobId, autoRefresh, refreshInterval, onStatsUpdate]);
 
   const handleProcessQueue = async () => {
+    if (processingRef.current) {
+      return;
+    }
+
+    processingRef.current = true;
     setProcessing(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        toast.error('Sesión expirada. Por favor inicia sesión nuevamente.');
-        return;
-      }
-
-      const headers = {
-        ...getSecurityHeaders(),
-        Authorization: `Bearer ${session.access_token}`,
-      };
+      const securityHeaders = await getFunctionHeaders();
 
       const { data, error } = await supabase.functions.invoke('process-message-queue', {
         body: { jobId },
-        headers,
+        headers: securityHeaders,
+        timeout: 30000,
       });
 
       if (error) {
@@ -98,6 +96,7 @@ export default function QueueMonitor({
       const message = err instanceof Error ? err.message : 'Error al procesar la cola.';
       toast.error(message);
     } finally {
+      processingRef.current = false;
       setProcessing(false);
     }
   };
@@ -115,6 +114,7 @@ export default function QueueMonitor({
   const completedCount = stats.sent + stats.failed;
   const progressPercentage = stats.total > 0 ? (completedCount / stats.total) * 100 : 0;
   const isProcessing = stats.processing > 0 || stats.pending > 0 || stats.retrying > 0;
+  const canProcessQueue = stats.pending > 0 || stats.retrying > 0 || stats.processing > 0;
 
   return (
     <Card>
@@ -133,7 +133,7 @@ export default function QueueMonitor({
             size="sm"
             variant="outline"
             onClick={handleProcessQueue}
-            disabled={processing || stats.pending === 0}
+            disabled={processing || !canProcessQueue}
           >
             {processing ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />

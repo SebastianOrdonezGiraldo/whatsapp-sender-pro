@@ -9,6 +9,7 @@ import { motion } from 'framer-motion';
 import QueueMonitor from '@/components/QueueMonitor';
 import { toast } from 'sonner';
 import { getEdgeErrorMessage, getWhatsAppFriendlyMessage } from '@/lib/error-utils';
+import { getFunctionHeaders } from '@/config/security';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -57,7 +58,9 @@ export default function JobDetailPage() {
   const { jobId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const fromSend = (location.state as { fromSend?: boolean } | null)?.fromSend === true;
+  const locationState = (location.state as { fromSend?: boolean; enqueueFailed?: boolean } | null);
+  const fromSend = locationState?.fromSend === true;
+  const enqueueFailedFromNavigation = locationState?.enqueueFailed === true;
   const [job, setJob] = useState<Job | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [queueMessages, setQueueMessages] = useState<QueueMessage[]>([]);
@@ -101,15 +104,18 @@ export default function JobDetailPage() {
         return;
       }
 
-      const [jobRes, msgRes] = await Promise.all([
+      const [jobRes, msgRes, queueRes] = await Promise.all([
         supabase.from('jobs').select('id, source_filename, total_rows, valid_rows, invalid_rows, duplicate_rows, sent_ok, sent_failed, status, assigned_to, created_at').eq('id', jobId).maybeSingle(),
         supabase.from('sent_messages').select('id, phone_e164, guide_number, recipient_name, status, error_message, wa_message_id, created_at').eq('job_id', jobId).order('created_at'),
+        supabase.from('message_queue').select('*').eq('job_id', jobId).order('created_at'),
       ]);
       const jobData = jobRes.data as unknown as Job | null;
       const messagesData = (msgRes.data ?? []) as unknown as Message[];
+      const queueData = (queueRes.data ?? []) as unknown as QueueMessage[];
 
       setJob(jobData);
       setMessages(messagesData);
+      setQueueMessages(queueData);
       setLoading(false);
     }
     loadInitialData();
@@ -162,12 +168,14 @@ export default function JobDetailPage() {
       toast.success(`Reintentando ${failedMessages.length} mensaje(s) fallido(s)...`);
 
       // Trigger processing
+      const securityHeaders = await getFunctionHeaders();
       const { error: processError } = await supabase.functions.invoke('process-message-queue', {
         body: { jobId },
+        headers: securityHeaders,
+        timeout: 30000,
       });
 
       if (processError) {
-        console.error('Error al procesar cola:', processError);
         const msg = await getEdgeErrorMessage(processError, 'No se pudo iniciar el procesamiento.');
         toast.warning(`Mensajes marcados para reintento. ${msg}`);
       } else {
@@ -177,7 +185,6 @@ export default function JobDetailPage() {
       // Refresh data
       await fetchData();
     } catch (error) {
-      console.error('Error al reintentar:', error);
       const msg = await getEdgeErrorMessage(error, 'Error al reintentar mensajes fallidos.');
       toast.error(msg);
     } finally {
@@ -265,19 +272,31 @@ export default function JobDetailPage() {
   ];
 
   const isProcessing = job?.status === 'QUEUED' || job?.status === 'PROCESSING';
+  const isEnqueueFailed = job?.status === 'FAILED_ENQUEUE';
 
   return (
     <div>
       {/* Banner: recién enviado o envío en proceso */}
-      {(fromSend || isProcessing) && (
-        <div className="mb-6 flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm">
-          <Info className="w-5 h-5 shrink-0 text-primary mt-0.5" />
+      {(fromSend || isProcessing || enqueueFailedFromNavigation || isEnqueueFailed) && (
+        <div
+          className={`mb-6 flex items-start gap-3 rounded-lg border p-4 text-sm ${
+            isEnqueueFailed || enqueueFailedFromNavigation
+              ? 'border-destructive/30 bg-destructive/5'
+              : 'border-primary/30 bg-primary/5'
+          }`}
+        >
+          <Info className={`w-5 h-5 shrink-0 mt-0.5 ${isEnqueueFailed || enqueueFailedFromNavigation ? 'text-destructive' : 'text-primary'}`} />
           <div>
-            {fromSend && (
+            {(isEnqueueFailed || enqueueFailedFromNavigation) && (
+              <p className="font-medium text-foreground">No se pudieron encolar los mensajes</p>
+            )}
+            {fromSend && !isEnqueueFailed && !enqueueFailedFromNavigation && (
               <p className="font-medium text-foreground">Envío iniciado</p>
             )}
             <p className="text-muted-foreground mt-0.5">
-              {isProcessing
+              {(isEnqueueFailed || enqueueFailedFromNavigation)
+                ? 'El envío se creó, pero no se pudo cargar la cola. Debe volver al inicio, cargar el archivo e intentar nuevamente.'
+                : isProcessing
                 ? 'Los mensajes se están enviando automáticamente. Puede usar "Actualizar" para ver el progreso o "Procesar cola" si el envío se pausó.'
                 : 'Puede usar "Actualizar" para ver el estado más reciente o "Reintentar fallidos" si hubo errores.'}
             </p>

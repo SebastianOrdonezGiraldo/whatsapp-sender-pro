@@ -21,13 +21,18 @@ export async function getEdgeErrorMessage(
     const msg = error.message;
     if (msg.includes('API Key no configurada')) return 'Error de configuración. Contacte al administrador del sistema.';
     if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) return 'Error de conexión. Verifique su red e intente de nuevo.';
+    if (msg.toLowerCase().includes('invalid jwt')) return 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.';
   }
 
   try {
     const err = error as { context?: Response };
     if (err?.context && typeof err.context?.json === 'function') {
       const body = (await err.context.json()) as EdgeErrorBody;
-      return body?.message || body?.error || fallback;
+      const message = body?.message || body?.error || '';
+      if (message.toLowerCase().includes('invalid jwt')) {
+        return 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.';
+      }
+      return message || fallback;
     }
   } catch {
     // ignore parse error
@@ -45,6 +50,7 @@ export function getEdgeErrorMessageSync(error: unknown, fallback = 'Ha ocurrido 
     const msg = error.message;
     if (msg.includes('API Key no configurada')) return 'Error de configuración. Contacte al administrador del sistema.';
     if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) return 'Error de conexión. Verifique su red.';
+    if (msg.toLowerCase().includes('invalid jwt')) return 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.';
     return msg;
   }
   return fallback;

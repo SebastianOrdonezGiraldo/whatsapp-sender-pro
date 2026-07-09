@@ -33,7 +33,7 @@ const CARRIERS: Record<Carrier, CarrierConfig> = {
   },
   interrapidisimo: {
     carrier: 'interrapidisimo',
-    templateName: 'interrapidisimo_tracking_notificacion',
+    templateName: 'interrapidisimo_tracking_notification',
     trackingUrlTemplate: 'https://www.interrapidisimo.com/rastreo/?guia={GUIA}',
     displayName: 'InterRapidísimo',
   },
@@ -68,6 +68,8 @@ function normalizeGuideDigits(guideNumber: string): string {
  * - Envia: 12 digits, resto
  */
 export function detectCarrier(guideNumber: string): CarrierConfig | null {
+  if (!guideNumber) return null;
+
   const cleanGuide = normalizeGuideDigits(guideNumber);
   if (!cleanGuide) return null;
 

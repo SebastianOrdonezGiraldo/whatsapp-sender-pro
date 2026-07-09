@@ -18,7 +18,7 @@ import type { ParsedRow } from '@/lib/xls-parser';
 import { getCarrierDisplayName } from '@/lib/carrier-detection';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { getSecurityHeaders } from '@/config/security';
+import { getFunctionHeaders } from '@/config/security';
 import { getEdgeErrorMessage, getEdgeErrorMessageSync } from '@/lib/error-utils';
 
 type RowCategory = 'valid' | 'invalid' | 'duplicate';
@@ -38,18 +38,11 @@ interface SendWhatsAppPayload {
 }
 
 async function invokeSendWhatsApp(payload: SendWhatsAppPayload) {
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError || !session?.access_token) {
-    throw new Error('No hay sesión activa. Por favor inicia sesión nuevamente.');
-  }
-
-  const headers = {
-    ...getSecurityHeaders(),
-    Authorization: `Bearer ${session.access_token}`,
-  };
+  const securityHeaders = await getFunctionHeaders();
   const { data, error } = await supabase.functions.invoke('enqueue-messages', {
     body: payload,
-    headers,
+    headers: securityHeaders,
+    timeout: 20000,
   });
 
   if (error) {
@@ -194,16 +187,37 @@ export default function PreviewPage() {
 
         const processed = data?.processResult;
         const processTriggerError = data?.processTriggerError;
+        const hasMorePending = Boolean(processed?.hasMorePending);
+        const remainingInQueue =
+          (processed?.queueStats?.pending || 0) +
+          (processed?.queueStats?.retrying || 0) +
+          (processed?.queueStats?.processing || 0);
+        const duplicatesSkipped = Number(data?.duplicatesSkipped || 0);
+        const invalidRowsSkipped = Number(data?.invalidRowsSkipped || 0);
+        const skippedParts: string[] = [];
+        if (duplicatesSkipped > 0) skippedParts.push(`${duplicatesSkipped} duplicadas internas`);
+        if (invalidRowsSkipped > 0) skippedParts.push(`${invalidRowsSkipped} inválidas`);
+        const skippedSuffix = skippedParts.length > 0 ? ` Se omitieron ${skippedParts.join(' y ')}.` : '';
 
         if (processTriggerError) {
           toast.warning(
-            `${data?.enqueued ?? sendableRows.length} mensajes encolados. Use "Procesar cola" en esta página para iniciar el envío.`,
+            `${data?.enqueued ?? sendableRows.length} mensajes encolados. Use "Procesar cola" en esta página para iniciar el envío.${skippedSuffix}`,
             { duration: 6000 }
           );
         } else if (processed) {
-          toast.success(`Listo: ${processed.sent || 0} enviados, ${processed.failed || 0} fallidos. Puede reintentar los fallidos aquí.`);
+          if (hasMorePending) {
+            const remainingSuffix = remainingInQueue > 0
+              ? ` Quedan ${remainingInQueue} en cola.`
+              : '';
+            toast.warning(
+              `Procesados por ahora: ${processed.sent || 0} enviados, ${processed.failed || 0} fallidos.${remainingSuffix} Use "Procesar cola" para continuar.${skippedSuffix}`,
+              { duration: 7000 }
+            );
+          } else {
+            toast.success(`Listo: ${processed.sent || 0} enviados, ${processed.failed || 0} fallidos. Puede reintentar los fallidos aquí.${skippedSuffix}`);
+          }
         } else {
-          toast.success(`${data?.enqueued || 0} mensajes encolados. El envío se realiza automáticamente.`);
+          toast.success(`${data?.enqueued || 0} mensajes encolados. El envío se realiza automáticamente.${skippedSuffix}`);
         }
 
         sessionStorage.removeItem('wa-preview-data');
@@ -212,12 +226,20 @@ export default function PreviewPage() {
         sessionStorage.removeItem('wa-assigned-to-id');
         navigate(`/history/${jobId}`, { state: { fromSend: true } });
       } catch (enqueueError) {
+        const { error: markFailedError } = await supabase
+          .from('jobs')
+          .update({ status: 'FAILED_ENQUEUE' })
+          .eq('id', jobId);
+        if (markFailedError) {
+          console.error('No se pudo marcar el job como FAILED_ENQUEUE desde frontend:', markFailedError);
+        }
+
         const message = await getEdgeErrorMessage(enqueueError, 'Error al encolar los mensajes.');
         toast.error(
-          `El envío se creó pero no se pudieron encolar los mensajes. (${message})`,
+          `El envío se creó pero no se pudieron encolar los mensajes. Se marcó como FALLIDO_ENCOLADO. (${message})`,
           { duration: 8000 }
         );
-        navigate(`/history/${jobId}`, { state: { fromSend: true } });
+        navigate(`/history/${jobId}`, { state: { enqueueFailed: true } });
         sessionStorage.removeItem('wa-preview-data');
         sessionStorage.removeItem('wa-preview-filename');
         sessionStorage.removeItem('wa-assigned-to');

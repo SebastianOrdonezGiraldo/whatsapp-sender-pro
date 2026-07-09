@@ -3,6 +3,7 @@
  * 
  * Configuración de seguridad de la aplicación
  */
+import { supabase } from '@/integrations/supabase/client';
 
 /**
  * API Key para autenticar requests a Edge Functions
@@ -35,8 +36,42 @@ export const getSecurityHeaders = (): Record<string, string> => {
   };
 };
 
+/**
+ * Headers para Edge Functions con JWT de sesión explícito
+ */
+export const getFunctionHeaders = async (): Promise<Record<string, string>> => {
+  // Force a server-side auth check so we don't rely on stale local storage only.
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user) {
+    throw new Error('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
+  }
+
+  let { data: { session }, error } = await supabase.auth.getSession();
+  if (error) {
+    throw new Error('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const isMissingToken = !session?.access_token;
+  const isAboutToExpire = !!session?.expires_at && session.expires_at <= now + 60;
+
+  if (isMissingToken || isAboutToExpire) {
+    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+    if (refreshError || !refreshed.session?.access_token) {
+      throw new Error('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
+    }
+    session = refreshed.session;
+  }
+
+  return {
+    ...getSecurityHeaders(),
+    Authorization: `Bearer ${session.access_token}`,
+  };
+};
+
 export default {
   getApiKey,
   getSecurityHeaders,
+  getFunctionHeaders,
 };
 

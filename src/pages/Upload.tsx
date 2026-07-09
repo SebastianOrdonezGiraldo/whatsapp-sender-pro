@@ -1,26 +1,42 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload as UploadIcon, FileSpreadsheet, AlertCircle, Loader2, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { parseXlsFile, type ParseResult } from '@/lib/xls-parser';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LIMITS } from '@/config/limits';
+import { supabase } from '@/integrations/supabase/client';
 
-// Lista de encargados de bodega
-const WAREHOUSE_STAFF = [
-  'Santiago',
-  'Daniel',
-  'Juan',
-  'Miguel',
-] as const;
+interface StaffOption {
+  id: string;
+  name: string;
+}
 
 export default function UploadPage() {
   const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
   const [assignedTo, setAssignedTo] = useState<string>('');
+  const [assignedToId, setAssignedToId] = useState<string>('');
+  const [staffList, setStaffList] = useState<StaffOption[]>([]);
+  const [staffLoading, setStaffLoading] = useState(true);
   const [dragActive, setDragActive] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Fetch active warehouse staff from DB
+  useEffect(() => {
+    supabase
+      .from('warehouse_staff')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('name')
+      .then(({ data, error }) => {
+        if (!error && data) {
+          setStaffList(data as StaffOption[]);
+        }
+        setStaffLoading(false);
+      });
+  }, []);
 
   const handleFile = useCallback((f: File) => {
     setError(null);
@@ -42,7 +58,7 @@ export default function UploadPage() {
     if (!file) return;
     
     // Validar que se haya seleccionado un encargado
-    if (!assignedTo) {
+    if (!assignedTo || !assignedToId) {
       setError('Por favor, seleccione quién está realizando el envío');
       return;
     }
@@ -80,6 +96,7 @@ export default function UploadPage() {
       sessionStorage.setItem('wa-preview-data', JSON.stringify(result.rows));
       sessionStorage.setItem('wa-preview-filename', file.name);
       sessionStorage.setItem('wa-assigned-to', assignedTo);
+      sessionStorage.setItem('wa-assigned-to-id', assignedToId);
       navigate('/preview');
     } catch (e) {
       setError(`Error procesando el archivo: ${(e as Error).message}`);
@@ -105,17 +122,23 @@ export default function UploadPage() {
               ¿Quién está realizando este envío? <span className="text-destructive">*</span>
             </label>
             <select
-              value={assignedTo}
+              value={assignedToId}
               onChange={(e) => {
-                setAssignedTo(e.target.value);
+                const selectedId = e.target.value;
+                setAssignedToId(selectedId);
+                const selected = staffList.find((s) => s.id === selectedId);
+                setAssignedTo(selected?.name || '');
                 setError(null);
               }}
               className="w-full px-4 py-3 rounded-lg border border-border bg-background focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+              disabled={staffLoading}
             >
-              <option value="">Seleccionar encargado...</option>
-              {WAREHOUSE_STAFF.map((name) => (
-                <option key={name} value={name}>
-                  {name}
+              <option value="">
+                {staffLoading ? 'Cargando...' : 'Seleccionar encargado...'}
+              </option>
+              {staffList.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
                 </option>
               ))}
             </select>

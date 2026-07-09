@@ -62,6 +62,8 @@ export default function HistoryPage() {
   const [guideOrPhoneQuery, setGuideOrPhoneQuery] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [staffFilter, setStaffFilter] = useState('');
+  const [staffList, setStaffList] = useState<{ id: string; name: string }[]>([]);
 
   const [debouncedSearch, setDebouncedSearch] = useState('');
   useEffect(() => {
@@ -75,7 +77,18 @@ export default function HistoryPage() {
     return () => clearTimeout(t);
   }, [guideOrPhoneQuery]);
 
-  const hasActiveFilters = statusFilter !== '' || searchQuery.trim() !== '' || guideOrPhoneQuery.trim() !== '' || dateFrom !== '' || dateTo !== '';
+  // Fetch staff list for filter
+  useEffect(() => {
+    supabase
+      .from('warehouse_staff')
+      .select('id, name')
+      .order('name')
+      .then(({ data }) => {
+        if (data) setStaffList(data as { id: string; name: string }[]);
+      });
+  }, []);
+
+  const hasActiveFilters = statusFilter !== '' || searchQuery.trim() !== '' || guideOrPhoneQuery.trim() !== '' || dateFrom !== '' || dateTo !== '' || staffFilter !== '';
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -127,6 +140,9 @@ export default function HistoryPage() {
       if (dateTo) {
         query = query.lte('created_at', `${dateTo}T23:59:59.999Z`);
       }
+      if (staffFilter) {
+        query = query.eq('assigned_to_id', staffFilter);
+      }
 
       const { data, error } = await query;
       if (error) throw error;
@@ -138,7 +154,7 @@ export default function HistoryPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, debouncedSearch, debouncedGuideOrPhone, dateFrom, dateTo]);
+  }, [statusFilter, debouncedSearch, debouncedGuideOrPhone, dateFrom, dateTo, staffFilter]);
 
   useEffect(() => {
     void fetchJobs();
@@ -150,6 +166,7 @@ export default function HistoryPage() {
     setGuideOrPhoneQuery('');
     setDateFrom('');
     setDateTo('');
+    setStaffFilter('');
   };
 
   const handleDeleteAll = async () => {
@@ -335,7 +352,7 @@ export default function HistoryPage() {
           </div>
           Filtros
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_auto_auto_auto] gap-4 xl:items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4 xl:items-end">
           <div>
             <label htmlFor="history-search" className="block text-xs font-medium text-muted-foreground mb-1.5">Archivo</label>
             <Input
@@ -370,6 +387,20 @@ export default function HistoryPage() {
                 <option key={opt.value || 'all'} value={opt.value}>
                   {opt.label}
                 </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="history-staff" className="block text-xs font-medium text-muted-foreground mb-1.5">Operario</label>
+            <select
+              id="history-staff"
+              value={staffFilter}
+              onChange={(e) => setStaffFilter(e.target.value)}
+              className="h-10 w-full rounded-lg border border-border/80 bg-background/80 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            >
+              <option value="">Todos</option>
+              {staffList.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
           </div>

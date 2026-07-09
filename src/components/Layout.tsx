@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Upload, History, MessageSquare, LogOut, User, Menu } from 'lucide-react';
+import { Upload, History, MessageSquare, LogOut, User, Menu, Shield } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -31,6 +31,7 @@ export default function Layout({ children }: Readonly<{ children: React.ReactNod
   const location = useLocation();
   const navigate = useNavigate();
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
@@ -41,6 +42,7 @@ export default function Layout({ children }: Readonly<{ children: React.ReactNod
     // Get current user
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUserEmail(user?.email || null);
+      setIsAdmin(user?.app_metadata?.role === 'admin');
     });
 
     // Listen for auth changes
@@ -48,6 +50,7 @@ export default function Layout({ children }: Readonly<{ children: React.ReactNod
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUserEmail(session?.user?.email || null);
+      setIsAdmin(session?.user?.app_metadata?.role === 'admin');
     });
 
     return () => subscription.unsubscribe();
@@ -104,11 +107,29 @@ export default function Layout({ children }: Readonly<{ children: React.ReactNod
                       <item.icon className="w-4 h-4 relative z-10" />
                       <span className="relative z-10">{item.label}</span>
                     </Link>
-                  );
-                })}
-              </nav>
+                    );
+                  })}
+                  {isAdmin && (
+                    <Link
+                      to="/admin"
+                      className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        location.pathname === '/admin' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {location.pathname === '/admin' && (
+                        <motion.div
+                          layoutId="nav-active"
+                          className="absolute inset-0 bg-primary/10 rounded-lg"
+                          transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                        />
+                      )}
+                      <Shield className="w-4 h-4 relative z-10" />
+                      <span className="relative z-10">Admin</span>
+                    </Link>
+                  )}
+                </nav>
 
-              {userEmail && (
+                {userEmail && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm" className="gap-2">
@@ -185,6 +206,17 @@ export default function Layout({ children }: Readonly<{ children: React.ReactNod
                         </Link>
                       );
                     })}
+                    {isAdmin && (
+                      <Link
+                        to="/admin"
+                        className={`flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-colors -mx-2 ${
+                          location.pathname === '/admin' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                        }`}
+                      >
+                        <Shield className="w-5 h-5" />
+                        Admin
+                      </Link>
+                    )}
                   </nav>
                 </SheetContent>
               </Sheet>

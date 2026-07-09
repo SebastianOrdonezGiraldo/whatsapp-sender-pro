@@ -16,6 +16,8 @@ export type Database = {
     Tables: {
       jobs: {
         Row: {
+          assigned_to: string | null
+          assigned_to_id: string | null
           created_at: string
           duplicate_rows: number
           id: string
@@ -29,6 +31,8 @@ export type Database = {
           valid_rows: number
         }
         Insert: {
+          assigned_to?: string | null
+          assigned_to_id?: string | null
           created_at?: string
           duplicate_rows?: number
           id?: string
@@ -42,6 +46,8 @@ export type Database = {
           valid_rows?: number
         }
         Update: {
+          assigned_to?: string | null
+          assigned_to_id?: string | null
           created_at?: string
           duplicate_rows?: number
           id?: string
@@ -54,7 +60,15 @@ export type Database = {
           user_id?: string | null
           valid_rows?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "jobs_assigned_to_id_fkey"
+            columns: ["assigned_to_id"]
+            isOneToOne: false
+            referencedRelation: "warehouse_staff"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       message_queue: {
         Row: {
@@ -174,6 +188,38 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      warehouse_staff: {
+        Row: {
+          id: string
+          name: string
+          is_active: boolean
+          user_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          is_active?: boolean
+          user_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          is_active?: boolean
+          user_id?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "warehouse_staff_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sent_messages: {
         Row: {

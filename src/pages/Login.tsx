@@ -18,7 +18,10 @@ export default function LoginPage() {
   // Redirect if already authenticated
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) navigate('/', { replace: true });
+      if (session) {
+        const isAdmin = session.user?.app_metadata?.role === 'admin';
+        navigate(isAdmin ? '/admin' : '/', { replace: true });
+      }
     });
   }, [navigate]);
 
@@ -36,7 +39,11 @@ export default function LoginPage() {
       if (error) throw error;
 
       toast.success('¡Bienvenido!');
-      navigate('/');
+
+      // Redirect admin to /admin, regular users to /
+      const { data: { user } } = await supabase.auth.getUser();
+      const isAdmin = user?.app_metadata?.role === 'admin';
+      navigate(isAdmin ? '/admin' : '/');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error de autenticación');
     } finally {

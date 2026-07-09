@@ -66,6 +66,7 @@ export default function PreviewPage() {
   const [rows, setRows] = useState<CategorizedRow[]>([]);
   const [filename, setFilename] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
+  const [assignedToId, setAssignedToId] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [activeTab, setActiveTab] = useState<RowCategory | 'all'>('all');
@@ -75,8 +76,10 @@ export default function PreviewPage() {
     const raw = sessionStorage.getItem('wa-preview-data');
     const fname = sessionStorage.getItem('wa-preview-filename') || '';
     const assigned = sessionStorage.getItem('wa-assigned-to') || '';
+    const assignedId = sessionStorage.getItem('wa-assigned-to-id') || '';
     setFilename(fname);
     setAssignedTo(assigned);
+    setAssignedToId(assignedId);
 
     if (!raw) {
       navigate('/');
@@ -168,6 +171,7 @@ export default function PreviewPage() {
           duplicate_rows: counts.duplicate,
           status: 'QUEUED',
           assigned_to: assignedTo,
+          assigned_to_id: assignedToId || null,
           user_id: user.id,
         })
         .select('id')
@@ -205,6 +209,7 @@ export default function PreviewPage() {
         sessionStorage.removeItem('wa-preview-data');
         sessionStorage.removeItem('wa-preview-filename');
         sessionStorage.removeItem('wa-assigned-to');
+        sessionStorage.removeItem('wa-assigned-to-id');
         navigate(`/history/${jobId}`, { state: { fromSend: true } });
       } catch (enqueueError) {
         const message = await getEdgeErrorMessage(enqueueError, 'Error al encolar los mensajes.');
@@ -216,6 +221,7 @@ export default function PreviewPage() {
         sessionStorage.removeItem('wa-preview-data');
         sessionStorage.removeItem('wa-preview-filename');
         sessionStorage.removeItem('wa-assigned-to');
+        sessionStorage.removeItem('wa-assigned-to-id');
       }
     } catch (err) {
       const message = getEdgeErrorMessageSync(err, 'Ha ocurrido un error. Intente de nuevo.');

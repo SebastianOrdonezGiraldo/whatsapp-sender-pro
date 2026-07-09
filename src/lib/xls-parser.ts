@@ -132,10 +132,11 @@ function parseCandidateRows(
     parsed.phoneValid = normalized.valid;
     parsed.phoneReason = normalized.reason;
 
-    // Detect carrier based on guide number format
-    const carrierInfo = detectCarrier(guideNumber);
+    // Detect carrier based on guide number format (pasar valor crudo si es número, para guías 76x de Excel)
+    const guideForCarrier = typeof cells[colGuide] === 'number' ? cells[colGuide] : guideNumber;
+    const carrierInfo = detectCarrier(guideForCarrier);
     parsed.carrier = carrierInfo?.carrier || null;
-    parsed.trackingUrl = getTrackingUrl(guideNumber);
+    parsed.trackingUrl = getTrackingUrl(guideForCarrier);
 
     if (parsed.phoneValid) validPhones += 1;
     rows.push(parsed);

@@ -98,6 +98,19 @@
     font-family: var(--font-display);
   }
 
+  /* Tipografía más legible en desktop */
+  @media (min-width: 1024px) {
+    html {
+      font-size: 15px;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    html {
+      font-size: 16px;
+    }
+  }
+
   code, .font-mono {
     font-family: var(--font-mono);
   }
@@ -122,5 +135,13 @@
 
   .status-duplicate {
     @apply bg-muted text-muted-foreground border border-border;
+  }
+
+  /* Safe area para móviles con notch/home indicator */
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top, 0);
+  }
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0);
   }
 }

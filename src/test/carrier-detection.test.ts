@@ -21,12 +21,38 @@ describe('detectCarrier', () => {
   });
 
   describe('InterRapidísimo detection', () => {
-    it('detects 12-digit guide numbers starting with 700', () => {
+    it('detects 12-digit guide numbers starting with 700 (first 3 digits)', () => {
       const result = detectCarrier('700184198166');
       expect(result).not.toBeNull();
       expect(result?.carrier).toBe('interrapidisimo');
       expect(result?.displayName).toBe('InterRapidísimo');
       expect(result?.templateName).toBe('interrapidisimo_tracking_notificacion');
+    });
+
+    it('detects guide 700184205491 as InterRapidísimo', () => {
+      const result = detectCarrier('700184205491');
+      expect(result).not.toBeNull();
+      expect(result?.carrier).toBe('interrapidisimo');
+      expect(result?.displayName).toBe('InterRapidísimo');
+    });
+
+    it('handles scientific notation from Excel (7.00184E+11)', () => {
+      const result = detectCarrier('7.00184205491E+11');
+      expect(result).not.toBeNull();
+      expect(result?.carrier).toBe('interrapidisimo');
+    });
+
+    it('handles numeric input from Excel', () => {
+      const result = detectCarrier(700184205491);
+      expect(result).not.toBeNull();
+      expect(result?.carrier).toBe('interrapidisimo');
+    });
+
+    it('detects guide numbers starting with 76 (e.g. 760000488530)', () => {
+      const result = detectCarrier('760000488530');
+      expect(result).not.toBeNull();
+      expect(result?.carrier).toBe('interrapidisimo');
+      expect(result?.displayName).toBe('InterRapidísimo');
     });
 
     it('detects guide numbers with spaces', () => {
@@ -54,6 +80,25 @@ describe('detectCarrier', () => {
       const result = detectCarrier('701123456789');
       expect(result).not.toBeNull();
       expect(result?.carrier).toBe('envia');
+    });
+  });
+
+  describe('Parámetros verificados (casos de uso reales)', () => {
+    it('detecta correctamente todas las transportadoras según guías de referencia', () => {
+      const casos = [
+        { guia: '2258298191', esperado: 'servientrega' },
+        { guia: '3012241226', esperado: 'servientrega' },
+        { guia: '957000255300', esperado: 'envia' },
+        { guia: '888004907296', esperado: 'deprisa' },
+        { guia: '700184205491', esperado: 'interrapidisimo' },
+        { guia: '760000488530', esperado: 'interrapidisimo' },
+      ] as const;
+
+      for (const { guia, esperado } of casos) {
+        const result = detectCarrier(guia);
+        expect(result, `Guía ${guia} debería ser ${esperado}`).not.toBeNull();
+        expect(result?.carrier, `Guía ${guia}`).toBe(esperado);
+      }
     });
   });
 

@@ -5,9 +5,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import ProtectedRoute from "./components/ProtectedRoute";
+import AdminRoute from "./components/AdminRoute";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Index from "./pages/Index";
+import Admin from "./pages/Admin";
 import Preview from "./pages/Preview";
 import History from "./pages/History";
 import JobDetail from "./pages/JobDetail";
@@ -36,6 +38,7 @@ const App = () => (
                     <Route path="/preview" element={<Preview />} />
                     <Route path="/history" element={<History />} />
                     <Route path="/history/:jobId" element={<JobDetail />} />
+                    <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Layout>

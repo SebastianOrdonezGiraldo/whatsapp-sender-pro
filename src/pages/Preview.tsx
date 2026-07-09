@@ -59,6 +59,7 @@ export default function PreviewPage() {
   const [rows, setRows] = useState<CategorizedRow[]>([]);
   const [filename, setFilename] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
+  const [assignedToId, setAssignedToId] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [activeTab, setActiveTab] = useState<RowCategory | 'all'>('all');
@@ -68,8 +69,10 @@ export default function PreviewPage() {
     const raw = sessionStorage.getItem('wa-preview-data');
     const fname = sessionStorage.getItem('wa-preview-filename') || '';
     const assigned = sessionStorage.getItem('wa-assigned-to') || '';
+    const assignedId = sessionStorage.getItem('wa-assigned-to-id') || '';
     setFilename(fname);
     setAssignedTo(assigned);
+    setAssignedToId(assignedId);
 
     if (!raw) {
       navigate('/');
@@ -161,6 +164,7 @@ export default function PreviewPage() {
           duplicate_rows: counts.duplicate,
           status: 'QUEUED',
           assigned_to: assignedTo,
+          assigned_to_id: assignedToId || null,
           user_id: user.id,
         })
         .select('id')
@@ -219,6 +223,7 @@ export default function PreviewPage() {
         sessionStorage.removeItem('wa-preview-data');
         sessionStorage.removeItem('wa-preview-filename');
         sessionStorage.removeItem('wa-assigned-to');
+        sessionStorage.removeItem('wa-assigned-to-id');
         navigate(`/history/${jobId}`, { state: { fromSend: true } });
       } catch (enqueueError) {
         const { error: markFailedError } = await supabase
@@ -238,6 +243,7 @@ export default function PreviewPage() {
         sessionStorage.removeItem('wa-preview-data');
         sessionStorage.removeItem('wa-preview-filename');
         sessionStorage.removeItem('wa-assigned-to');
+        sessionStorage.removeItem('wa-assigned-to-id');
       }
     } catch (err) {
       const message = getEdgeErrorMessageSync(err, 'Ha ocurrido un error. Intente de nuevo.');
@@ -265,17 +271,17 @@ export default function PreviewPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+        <div className="flex items-start gap-3 min-w-0">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="shrink-0" aria-label="Volver">
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <div>
-            <h2 className="text-2xl font-bold font-display">Previsualización</h2>
-            <p className="text-sm text-muted-foreground">
+          <div className="min-w-0">
+            <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold font-display">Previsualización</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground truncate">
               <span className="font-mono">{filename}</span>
               {assignedTo && (
-                <span className="ml-3">
+                <span className="block sm:inline sm:ml-3 mt-0.5 sm:mt-0">
                   • Encargado: <span className="font-semibold text-primary">{assignedTo}</span>
                 </span>
               )}
@@ -285,7 +291,7 @@ export default function PreviewPage() {
         <Button
           onClick={handleSendClick}
           disabled={sendableCount === 0 || sending}
-          className="h-11 px-6 font-display"
+          className="h-11 px-6 font-display w-full sm:w-auto shrink-0"
         >
           {sending ? (
             <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Enviando...</>
@@ -323,7 +329,7 @@ export default function PreviewPage() {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`glass-card p-4 text-left transition-all ${
+            className={`glass-card p-4 lg:p-5 text-left transition-all hover:border-primary/30 ${
               activeTab === tab.key ? 'ring-2 ring-primary' : ''
             }`}
           >
@@ -335,16 +341,16 @@ export default function PreviewPage() {
 
       {/* Table */}
       <div className="glass-card overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[min(70vh,600px)]">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/50">
-                <th className="text-left p-3 font-medium text-muted-foreground">Estado</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">Destinatario</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">Celular</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">N° Guía</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">Transportadora</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">Razón</th>
+            <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm shadow-[0_1px_0_0_hsl(var(--border))]">
+              <tr>
+                <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Estado</th>
+                <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Destinatario</th>
+                <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Celular</th>
+                <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">N° Guía</th>
+                <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Transportadora</th>
+                <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Razón</th>
               </tr>
             </thead>
             <tbody>
@@ -363,7 +369,7 @@ export default function PreviewPage() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: i * 0.01 }}
-                  className="border-b border-border/50 last:border-0"
+                  className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors"
                 >
                   <td className="p-3">
                     <Badge variant="outline" className={config.className}>

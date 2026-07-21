@@ -1,6 +1,6 @@
 # Edge Functions - WA Notify
 
-Este directorio contiene las Edge Functions de Supabase para el procesamiento de mensajes de WhatsApp.
+Este directorio contiene las Edge Functions de Supabase para el procesamiento de mensajes de WhatsApp y correos transaccionales con la guía de envío.
 
 ## 📁 Estructura
 
@@ -68,6 +68,16 @@ WA_TEMPLATE_NAME=shipment_notification
 WA_TEMPLATE_LANG=es_CO
 WA_GRAPH_VERSION=v19.0
 SENDER_NAME="Import Corporal Medical"
+
+# SMTP Hostinger (guardar siempre como secretos de Supabase)
+SMTP_HOST=smtp.hostinger.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=notificaciones@tu-dominio.com
+SMTP_PASSWORD=your_mailbox_password
+SMTP_FROM=notificaciones@tu-dominio.com
+SMTP_FROM_NAME="Import Corporal Medical"
+# SMTP_REPLY_TO=servicioalcliente@tu-dominio.com
 ```
 
 ## 📦 Despliegue
@@ -85,14 +95,18 @@ supabase functions deploy process-message-queue
 
 ### Configurar secretos
 
-```bash
-# Via CLI
-supabase secrets set WA_TOKEN="your_token"
-supabase secrets set WA_PHONE_NUMBER_ID="your_phone_id"
+```powershell
+# Via CLI, usando un archivo local ignorado por Git para no dejar la clave SMTP
+# en el historial de la terminal:
+Copy-Item supabase/functions/.env.example supabase/functions/.env.local
+# Edite .env.local con los valores reales y luego ejecute:
+supabase secrets set --env-file supabase/functions/.env.local
 
 # O via Dashboard
 # Settings > Edge Functions > Secrets
 ```
+
+Ejecute `supabase db push` antes de desplegar las funciones: la cola necesita las columnas de estado de correo agregadas por la migración `20260718000000_add_email_notifications.sql`.
 
 ### Verificar despliegue
 

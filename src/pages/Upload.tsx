@@ -110,7 +110,7 @@ export default function UploadPage() {
       <div className="mb-6 lg:mb-8">
         <h2 className="text-2xl lg:text-3xl font-bold font-display">Subir Informe</h2>
         <p className="text-muted-foreground mt-1.5">
-          Cargue el archivo .xls exportado para enviar notificaciones por WhatsApp
+          Cargue el archivo .xls exportado para enviar notificaciones por WhatsApp y, opcionalmente, por correo
         </p>
       </div>
 
@@ -247,6 +247,7 @@ export default function UploadPage() {
                   <p className="font-medium text-foreground">💡 Consejos</p>
                   <ul className="list-disc list-inside space-y-1">
                     <li>Ordena por fecha o transportadora antes de dividir</li>
+                    <li>Agrega una columna Correo o Email para habilitar el envío por correo</li>
                     <li>Cada archivo se procesa independientemente</li>
                     <li>Revisa el progreso en Historial</li>
                   </ul>

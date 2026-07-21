@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, CheckCircle2, XCircle, Copy, Loader2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Send, CheckCircle2, XCircle, Copy, Loader2, AlertTriangle, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -33,6 +33,7 @@ interface SendWhatsAppPayload {
     phone_e164: string;
     guide_number: string;
     recipient_name: string;
+    recipient_email?: string | null;
   }>;
   autoProcess?: boolean;
 }
@@ -64,6 +65,7 @@ export default function PreviewPage() {
   const [sending, setSending] = useState(false);
   const [activeTab, setActiveTab] = useState<RowCategory | 'all'>('all');
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [sendEmail, setSendEmail] = useState(true);
 
   useEffect(() => {
     const raw = sessionStorage.getItem('wa-preview-data');
@@ -134,6 +136,8 @@ export default function PreviewPage() {
   const filteredRows = activeTab === 'all' ? rows : rows.filter(r => r.category === activeTab);
   const sendableCount = counts.valid + counts.duplicate;
   const sendableRows = rows.filter(r => r.category === 'valid' || r.category === 'duplicate');
+  const validEmailCount = sendableRows.filter(r => r.emailValid).length;
+  const invalidEmailCount = sendableRows.filter(r => r.recipientEmail && !r.emailValid).length;
 
   const handleSendClick = () => {
     if (sendableCount === 0) {
@@ -181,22 +185,33 @@ export default function PreviewPage() {
             phone_e164: r.phoneE164,
             guide_number: r.guideNumber,
             recipient_name: r.recipient,
+            recipient_email: sendEmail && r.emailValid ? r.recipientEmail : null,
           })),
           autoProcess: true,
         });
 
         const processed = data?.processResult;
         const processTriggerError = data?.processTriggerError;
-        const hasMorePending = Boolean(processed?.hasMorePending);
+        const hasMorePending = Boolean(processed?.hasMorePending || processed?.hasMoreEmailPending);
         const remainingInQueue =
           (processed?.queueStats?.pending || 0) +
           (processed?.queueStats?.retrying || 0) +
           (processed?.queueStats?.processing || 0);
         const duplicatesSkipped = Number(data?.duplicatesSkipped || 0);
         const invalidRowsSkipped = Number(data?.invalidRowsSkipped || 0);
+        const invalidEmailsSkipped = Number(data?.invalidEmailsSkipped || 0);
+        const emailsSent = Number(processed?.emailsSent || 0);
+        const emailsFailed = Number(processed?.emailsFailed || 0);
+        const emailsRemaining =
+          Number(processed?.queueStats?.email_pending || 0) +
+          Number(processed?.queueStats?.email_processing || 0);
+        const emailSummary = sendEmail && validEmailCount > 0
+          ? ` Correos: ${emailsSent} enviados, ${emailsFailed} fallidos${emailsRemaining > 0 ? `, ${emailsRemaining} pendientes` : ''}.`
+          : '';
         const skippedParts: string[] = [];
         if (duplicatesSkipped > 0) skippedParts.push(`${duplicatesSkipped} duplicadas internas`);
         if (invalidRowsSkipped > 0) skippedParts.push(`${invalidRowsSkipped} inválidas`);
+        if (invalidEmailsSkipped > 0) skippedParts.push(`${invalidEmailsSkipped} correos inválidos`);
         const skippedSuffix = skippedParts.length > 0 ? ` Se omitieron ${skippedParts.join(' y ')}.` : '';
 
         if (processTriggerError) {
@@ -210,11 +225,11 @@ export default function PreviewPage() {
               ? ` Quedan ${remainingInQueue} en cola.`
               : '';
             toast.warning(
-              `Procesados por ahora: ${processed.sent || 0} enviados, ${processed.failed || 0} fallidos.${remainingSuffix} Use "Procesar cola" para continuar.${skippedSuffix}`,
+              `Procesados por ahora: ${processed.sent || 0} WhatsApp enviados, ${processed.failed || 0} fallidos.${emailSummary}${remainingSuffix} Use "Procesar cola" para continuar.${skippedSuffix}`,
               { duration: 7000 }
             );
           } else {
-            toast.success(`Listo: ${processed.sent || 0} enviados, ${processed.failed || 0} fallidos. Puede reintentar los fallidos aquí.${skippedSuffix}`);
+            toast.success(`Listo: ${processed.sent || 0} WhatsApp enviados, ${processed.failed || 0} fallidos.${emailSummary} Puede reintentar los fallidos aquí.${skippedSuffix}`);
           }
         } else {
           toast.success(`${data?.enqueued || 0} mensajes encolados. El envío se realiza automáticamente.${skippedSuffix}`);
@@ -296,7 +311,10 @@ export default function PreviewPage() {
           {sending ? (
             <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Enviando...</>
           ) : (
-            <><Send className="w-4 h-4 mr-2" /> Enviar WhatsApp ({sendableCount})</>
+            <>
+              <Send className="w-4 h-4 mr-2" />
+              {sendEmail && validEmailCount > 0 ? 'Enviar WhatsApp + correo' : 'Enviar WhatsApp'} ({sendableCount})
+            </>
           )}
         </Button>
       </div>
@@ -305,12 +323,15 @@ export default function PreviewPage() {
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Enviar mensajes por WhatsApp?</AlertDialogTitle>
+            <AlertDialogTitle>¿Enviar las notificaciones?</AlertDialogTitle>
             <AlertDialogDescription>
-              Se enviarán <strong>{sendableCount}</strong> mensaje(s):{' '}
+              Se enviarán <strong>{sendableCount}</strong> mensaje(s) por WhatsApp: {' '}
               {counts.valid > 0 && <>{counts.valid} válidos</>}
               {counts.valid > 0 && counts.duplicate > 0 && ' y '}
               {counts.duplicate > 0 && <>{counts.duplicate} duplicados (se reenviarán)</>}.
+              {sendEmail && validEmailCount > 0 && (
+                <> También se enviarán <strong>{validEmailCount}</strong> correo(s) con la guía y el enlace de rastreo.</>
+              )}
               Serás redirigido al detalle del envío para ver el progreso en tiempo real.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -339,6 +360,25 @@ export default function PreviewPage() {
         ))}
       </div>
 
+      <label className={`glass-card mb-6 flex items-start gap-3 p-4 ${validEmailCount === 0 ? 'opacity-60' : 'cursor-pointer'}`}>
+        <input
+          type="checkbox"
+          checked={sendEmail && validEmailCount > 0}
+          onChange={(event) => setSendEmail(event.target.checked)}
+          disabled={validEmailCount === 0}
+          className="mt-1 h-4 w-4 rounded border-border accent-primary"
+        />
+        <Mail className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+        <span>
+          <span className="block font-medium">Enviar también por correo</span>
+          <span className="block text-sm text-muted-foreground">
+            {validEmailCount > 0
+              ? `${validEmailCount} destinatario(s) tienen un correo válido.${invalidEmailCount > 0 ? ` Se omitirán ${invalidEmailCount} correo(s) inválido(s).` : ''}`
+              : 'El archivo no contiene una columna Correo/Email con direcciones válidas.'}
+          </span>
+        </span>
+      </label>
+
       {/* Table */}
       <div className="glass-card overflow-hidden">
         <div className="overflow-auto max-h-[min(70vh,600px)]">
@@ -348,6 +388,7 @@ export default function PreviewPage() {
                 <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Estado</th>
                 <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Destinatario</th>
                 <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Celular</th>
+                <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Correo</th>
                 <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">N° Guía</th>
                 <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Transportadora</th>
                 <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Razón</th>
@@ -381,6 +422,9 @@ export default function PreviewPage() {
                   <td className="p-3 font-mono text-xs">
                     {row.phoneE164 || row.phoneRaw || '—'}
                   </td>
+                  <td className={`p-3 text-xs ${row.recipientEmail && !row.emailValid ? 'text-destructive' : ''}`}>
+                    {row.recipientEmail || '—'}
+                  </td>
                   <td className="p-3 font-mono text-xs">{row.guideNumber || '—'}</td>
                   <td className="p-3">
                     {row.carrier ? (
@@ -394,6 +438,9 @@ export default function PreviewPage() {
                   <td className="p-3 text-xs text-muted-foreground">
                     {row.category === 'invalid' && (row.phoneReason || 'Datos incompletos')}
                     {row.category === 'duplicate' && 'Ya enviado previamente (se reenviará)'}
+                    {row.recipientEmail && !row.emailValid && (
+                      <span className="block text-destructive">{row.emailReason || 'Correo inválido; se omitirá'}</span>
+                    )}
                   </td>
                 </motion.tr>
                 );

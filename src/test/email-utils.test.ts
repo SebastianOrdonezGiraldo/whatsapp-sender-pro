@@ -8,6 +8,10 @@ import {
   EMAIL_LOGO_BASE64,
   EMAIL_LOGO_CID,
 } from '../../supabase/functions/_shared/email-logo';
+import {
+  EMAIL_ICON_ATTACHMENTS,
+  EMAIL_ICON_CIDS,
+} from '../../supabase/functions/_shared/email-icons';
 
 describe('email utils', () => {
   it('normaliza correos válidos y rechaza formatos inválidos', () => {
@@ -32,6 +36,17 @@ describe('email utils', () => {
     expect(content.html).toContain(`src="cid:${EMAIL_LOGO_CID}"`);
     expect(EMAIL_LOGO_BASE64).toMatch(/^\/9j\//);
     expect(EMAIL_LOGO_BASE64.length).toBeGreaterThan(10_000);
+    expect(EMAIL_ICON_ATTACHMENTS).toHaveLength(9);
+    expect(EMAIL_ICON_ATTACHMENTS.every((attachment) => attachment.content.startsWith('iVBORw0KGgo'))).toBe(true);
+    expect(content.html).toContain(`src="cid:${EMAIL_ICON_CIDS.packageCheck}"`);
+    expect(content.html).toContain(`src="cid:${EMAIL_ICON_CIDS.document}"`);
+    expect(content.html).toContain(`src="cid:${EMAIL_ICON_CIDS.truck}"`);
+    expect(content.html).toContain(`src="cid:${EMAIL_ICON_CIDS.shield}"`);
+    expect(content.html).toContain(`src="cid:${EMAIL_ICON_CIDS.stopwatch}"`);
+    expect(content.html).toContain(`src="cid:${EMAIL_ICON_CIDS.box}"`);
+    expect(content.html).toContain(`src="cid:${EMAIL_ICON_CIDS.instagram}"`);
+    expect(content.html).toContain(`src="cid:${EMAIL_ICON_CIDS.whatsapp}"`);
+    expect(content.html).toContain(`src="cid:${EMAIL_ICON_CIDS.heart}"`);
     expect(content.html).toContain('https://www.instagram.com/importcorporalmedicalsas/');
     expect(content.html).toContain('https://wa.me/573163404723?text=Hola%20tengo%20una%20duda%20acerca%20de%20mi%20pedido');
     expect(content.html).toContain('Rastrear envío');

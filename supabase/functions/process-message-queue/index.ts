@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import nodemailer from "npm:nodemailer@7.0.10";
 import { detectCarrier, getCarrierConfig, getTrackingUrl, type Carrier } from "../_shared/carrier-utils.ts";
+import { EMAIL_ICON_ATTACHMENTS } from "../_shared/email-icons.ts";
 import { EMAIL_LOGO_BASE64, EMAIL_LOGO_CID } from "../_shared/email-logo.ts";
 import { buildGuideEmailContent } from "../_shared/email-utils.ts";
 import { computeNextRetryAt } from "../_shared/retry-utils.ts";
@@ -155,14 +156,17 @@ async function sendGuideEmail(
       subject: content.subject,
       text: content.text,
       html: content.html,
-      attachments: [{
-        filename: "import-corporal-medical-logo.jpg",
-        content: EMAIL_LOGO_BASE64,
-        encoding: "base64",
-        contentType: "image/jpeg",
-        contentDisposition: "inline",
-        cid: EMAIL_LOGO_CID,
-      }],
+      attachments: [
+        {
+          filename: "import-corporal-medical-logo.jpg",
+          content: EMAIL_LOGO_BASE64,
+          encoding: "base64",
+          contentType: "image/jpeg",
+          contentDisposition: "inline",
+          cid: EMAIL_LOGO_CID,
+        },
+        ...EMAIL_ICON_ATTACHMENTS,
+      ],
     });
 
     return {

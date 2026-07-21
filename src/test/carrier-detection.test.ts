@@ -128,6 +128,11 @@ describe('getCarrierInfo', () => {
 });
 
 describe('getTrackingUrl', () => {
+  it('generates a direct tracking URL for Servientrega', () => {
+    const url = getTrackingUrl('2258298191');
+    expect(url).toBe('https://mobile.servientrega.com/WebSitePortal/RastreoEnvioDetalle.html?Guia=2258298191');
+  });
+
   it('generates correct tracking URL for InterRapidísimo', () => {
     const url = getTrackingUrl('700184198166');
     expect(url).toBe('https://www.interrapidisimo.com/rastreo/?guia=700184198166');

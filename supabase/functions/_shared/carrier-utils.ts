@@ -16,7 +16,7 @@ const CARRIERS: Record<Carrier, CarrierConfig> = {
   servientrega: {
     carrier: 'servientrega',
     templateName: 'servientrega_tracking_notification',
-    trackingUrlTemplate: 'https://www.servientrega.com/rastreo/multiple/{GUIA}',
+    trackingUrlTemplate: 'https://mobile.servientrega.com/WebSitePortal/RastreoEnvioDetalle.html?Guia={GUIA}',
     displayName: 'Servientrega',
   },
   envia: {

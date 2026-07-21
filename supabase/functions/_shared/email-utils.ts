@@ -1,5 +1,6 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck - Shared between Deno edge functions and test environment
+import { EMAIL_LOGO_SRC } from './email-logo.ts';
 
 export interface GuideEmailContentInput {
   recipientName: string;
@@ -8,6 +9,9 @@ export interface GuideEmailContentInput {
   trackingUrl?: string | null;
   senderName: string;
 }
+
+const INSTAGRAM_URL = 'https://www.instagram.com/importcorporalmedicalsas/';
+const WHATSAPP_URL = 'https://wa.me/573163404723?text=Hola%20tengo%20una%20duda%20acerca%20de%20mi%20pedido';
 
 export function normalizeRecipientEmail(value: unknown): string | null {
   const email = String(value ?? '').trim();
@@ -38,36 +42,173 @@ export function buildGuideEmailContent(input: GuideEmailContentInput): {
     ? `Puedes rastrear tu envío aquí: ${input.trackingUrl}`
     : 'Consulta el estado del envío directamente con la transportadora.';
   const trackingHtml = input.trackingUrl
-    ? `<a href="${escapeHtml(input.trackingUrl)}" style="display:inline-block;padding:12px 18px;border-radius:8px;background:#0f172a;color:#ffffff;text-decoration:none;font-weight:600">Rastrear envío</a>`
-    : '<p>Consulta el estado del envío directamente con la transportadora.</p>';
+    ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto">
+                    <tr>
+                      <td align="center" bgcolor="#78b52c" style="border-radius:8px;background-color:#78b52c;background-image:linear-gradient(90deg,#78b52c 0%,#94c62e 100%);box-shadow:0 6px 14px rgba(120,181,44,.24)">
+                        <a href="${escapeHtml(input.trackingUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:13px 28px;color:#ffffff;font-size:15px;font-weight:700;line-height:20px;text-decoration:none">Rastrear envío&nbsp;&nbsp;&#8594;</a>
+                      </td>
+                    </tr>
+                  </table>`
+    : `<p style="margin:0;color:#52606d;font-size:14px;line-height:22px;text-align:center">Consulta el estado del envío directamente con la transportadora.</p>`;
+
+  const recipientName = escapeHtml(input.recipientName);
+  const guideNumber = escapeHtml(input.guideNumber);
+  const carrierName = escapeHtml(input.carrierName);
+  const senderName = escapeHtml(input.senderName);
 
   const text = [
     `Hola ${input.recipientName},`,
     '',
-    'Tu guía de envío fue creada.',
+    '¡Tu guía de envío fue creada!',
+    'Tu pedido ya está en camino. Aquí tienes los datos para que puedas rastrear tu envío.',
     `Número de guía: ${input.guideNumber}`,
     `Transportadora: ${input.carrierName}`,
     trackingText,
     '',
+    `¿Tienes dudas sobre tu envío? Escríbenos por WhatsApp: ${WHATSAPP_URL}`,
+    `Instagram: ${INSTAGRAM_URL}`,
+    '',
     input.senderName,
+    'Gracias por confiar en nosotros.',
   ].join('\n');
 
   const html = `<!doctype html>
 <html lang="es">
-  <body style="margin:0;background:#f8fafc;font-family:Arial,sans-serif;color:#0f172a">
-    <div style="max-width:600px;margin:0 auto;padding:32px 16px">
-      <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px">
-        <h1 style="margin:0 0 18px;font-size:22px">Tu guía de envío fue creada</h1>
-        <p>Hola ${escapeHtml(input.recipientName)},</p>
-        <p>Estos son los datos para consultar tu envío:</p>
-        <div style="margin:20px 0;padding:16px;border-radius:8px;background:#f1f5f9">
-          <p style="margin:0 0 8px"><strong>Número de guía:</strong> ${escapeHtml(input.guideNumber)}</p>
-          <p style="margin:0"><strong>Transportadora:</strong> ${escapeHtml(input.carrierName)}</p>
-        </div>
-        ${trackingHtml}
-        <p style="margin:24px 0 0;color:#64748b;font-size:13px">${escapeHtml(input.senderName)}</p>
-      </div>
-    </div>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="x-apple-disable-message-reformatting">
+    <title>${subject}</title>
+    <style>
+      @media only screen and (max-width:620px) {
+        .email-shell { width:100% !important; }
+        .email-padding { padding-left:16px !important; padding-right:16px !important; }
+        .content-card { width:100% !important; }
+        .benefit-cell { display:inline-block !important; width:50% !important; box-sizing:border-box !important; }
+      }
+    </style>
+  </head>
+  <body style="margin:0;padding:0;background-color:#f3f4f6;color:#263241;font-family:'Trebuchet MS',Arial,sans-serif;-webkit-font-smoothing:antialiased">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">Tu pedido ya está en camino. Consulta aquí tu guía ${guideNumber}.</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#f3f4f6" style="width:100%;background-color:#f3f4f6">
+      <tr>
+        <td align="center" class="email-padding" style="padding:24px 12px 32px">
+          <table role="presentation" width="620" cellspacing="0" cellpadding="0" border="0" bgcolor="#ffffff" class="email-shell" style="width:620px;max-width:620px;background:#ffffff;border:1px solid #e8eaed;border-radius:16px;box-shadow:0 12px 35px rgba(41,48,60,.10);overflow:hidden">
+            <tr>
+              <td align="center" style="padding:25px 24px 23px;border-bottom:1px solid #dce8c8;background-color:#ffffff">
+                <img src="${EMAIL_LOGO_SRC}" width="300" alt="Import Corporal Medical S.A.S." style="display:block;width:300px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none">
+              </td>
+            </tr>
+            <tr>
+              <td align="center" class="email-padding" style="padding:8px 36px 0;background-color:#fbfcfb">
+                <table role="presentation" width="520" cellspacing="0" cellpadding="0" border="0" bgcolor="#ffffff" class="content-card" style="width:520px;max-width:520px;background:#ffffff;border:1px solid #eceef0;border-radius:15px;box-shadow:0 9px 24px rgba(54,61,71,.10);overflow:hidden">
+                  <tr>
+                    <td align="center" style="padding:20px 34px 10px">
+                      <table role="presentation" width="66" height="66" cellspacing="0" cellpadding="0" border="0" style="width:66px;height:66px;margin:0 auto">
+                        <tr>
+                          <td align="center" valign="middle" bgcolor="#f3f8e9" style="width:66px;height:66px;border:1px solid #dce9c5;border-radius:50%;color:#78b52c;font-size:31px;line-height:66px">&#128230;</td>
+                        </tr>
+                      </table>
+                      <h1 style="margin:14px 0 18px;color:#263241;font-size:25px;line-height:32px;font-weight:700;letter-spacing:-.3px">¡Tu guía de envío fue creada!</h1>
+                      <p style="margin:0 0 7px;color:#4b5563;font-size:14px;line-height:22px">Hola <strong style="color:#7a2496">${recipientName}</strong>,</p>
+                      <p style="margin:0;color:#4b5563;font-size:14px;line-height:22px">Tu pedido ya está en camino. Aquí tienes los datos para que puedas rastrear tu envío.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:8px 42px 10px">
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#fafafa" style="width:100%;background:#fafafa;border:1px solid #f0f0f1;border-radius:12px;overflow:hidden">
+                        <tr>
+                          <td width="62" align="center" style="padding:13px 8px 13px 16px;border-bottom:1px solid #eceef0">
+                            <table role="presentation" width="42" height="42" cellspacing="0" cellpadding="0" border="0">
+                              <tr><td align="center" valign="middle" bgcolor="#ffffff" style="width:42px;height:42px;border:1px solid #e7e1eb;border-radius:50%;color:#8a2aa5;font-size:21px;line-height:42px">&#128196;</td></tr>
+                            </table>
+                          </td>
+                          <td style="padding:13px 16px 13px 4px;border-bottom:1px solid #eceef0">
+                            <p style="margin:0 0 3px;color:#69727d;font-size:12px;line-height:16px">Número de guía:</p>
+                            <p style="margin:0;color:#72258f;font-size:15px;line-height:19px;font-weight:700">${guideNumber}</p>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td width="62" align="center" style="padding:13px 8px 13px 16px">
+                            <table role="presentation" width="42" height="42" cellspacing="0" cellpadding="0" border="0">
+                              <tr><td align="center" valign="middle" bgcolor="#ffffff" style="width:42px;height:42px;border:1px solid #e7e1eb;border-radius:50%;color:#8a2aa5;font-size:21px;line-height:42px">&#128666;</td></tr>
+                            </table>
+                          </td>
+                          <td style="padding:13px 16px 13px 4px">
+                            <p style="margin:0 0 3px;color:#69727d;font-size:12px;line-height:16px">Transportadora:</p>
+                            <p style="margin:0;color:#72258f;font-size:15px;line-height:19px;font-weight:700">${carrierName}</p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding:0 34px 16px">
+                      ${trackingHtml}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding:0 24px 18px">
+                      <p style="margin:0;color:#4f5965;font-size:12px;line-height:19px">
+                        <span style="color:#78b52c;font-size:14px">&#9685;</span>&nbsp;
+                        ¿Tienes dudas con tu envío?
+                        <a href="${WHATSAPP_URL}" target="_blank" rel="noopener noreferrer" style="color:#4f5965;font-weight:700;text-decoration:none">Contáctanos, estamos para ayudarte.</a>
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td bgcolor="#f4f8e9" style="background:#f4f8e9;border-top:1px solid #e7efd6;padding:14px 8px">
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                        <tr>
+                          <td width="25%" align="center" valign="top" class="benefit-cell" style="padding:5px 4px;color:#39434e">
+                            <div style="color:#78b52c;font-size:25px;line-height:28px">&#10003;</div>
+                            <div style="margin-top:5px;font-size:10px;line-height:13px;font-weight:700">Seguridad<br>en cada envío</div>
+                          </td>
+                          <td width="25%" align="center" valign="top" class="benefit-cell" style="padding:5px 4px;color:#39434e">
+                            <div style="color:#78b52c;font-size:25px;line-height:28px">&#9719;</div>
+                            <div style="margin-top:5px;font-size:10px;line-height:13px;font-weight:700">Entregas<br>puntuales</div>
+                          </td>
+                          <td width="25%" align="center" valign="top" class="benefit-cell" style="padding:5px 4px;color:#39434e">
+                            <div style="color:#78b52c;font-size:25px;line-height:28px">&#9633;</div>
+                            <div style="margin-top:5px;font-size:10px;line-height:13px;font-weight:700">Empaque<br>seguro</div>
+                          </td>
+                          <td width="25%" align="center" valign="top" class="benefit-cell" style="padding:5px 4px;color:#39434e">
+                            <div style="color:#78b52c;font-size:27px;line-height:28px">&#9825;</div>
+                            <div style="margin-top:5px;font-size:10px;line-height:13px;font-weight:700">Comprometidos<br>contigo</div>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:18px 28px 8px;background-color:#fbfcfb">
+                <p style="margin:0 0 10px;color:#3e4752;font-size:12px;line-height:18px">Síguenos en nuestras redes</p>
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto">
+                  <tr>
+                    <td style="padding:0 5px">
+                      <a href="${INSTAGRAM_URL}" target="_blank" rel="noopener noreferrer" aria-label="Instagram" style="display:block;width:30px;height:30px;border-radius:50%;background:#8a2aa5;color:#ffffff;font-size:10px;line-height:30px;font-weight:700;text-align:center;text-decoration:none">IG</a>
+                    </td>
+                    <td style="padding:0 5px">
+                      <a href="${WHATSAPP_URL}" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" style="display:block;width:30px;height:30px;border-radius:50%;background:#78b52c;color:#ffffff;font-size:10px;line-height:30px;font-weight:700;text-align:center;text-decoration:none">WA</a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:8px 70px 22px;background-color:#fbfcfb">
+                <div style="height:1px;line-height:1px;background:#bfd58b;font-size:1px">&nbsp;</div>
+                <p style="margin:12px 0 2px;color:#78a92e;font-size:12px;line-height:17px;font-weight:700">${senderName}</p>
+                <p style="margin:0;color:#4b5563;font-size:11px;line-height:17px">Gracias por confiar en nosotros. <span style="color:#8a2aa5">&#9829;</span></p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
   </body>
 </html>`;
 

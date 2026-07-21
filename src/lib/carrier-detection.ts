@@ -34,7 +34,7 @@ const CARRIERS: Record<Carrier, CarrierInfo> = {
   interrapidisimo: {
     carrier: 'interrapidisimo',
     templateName: 'interrapidisimo_tracking_notificacion',
-    trackingUrlTemplate: 'https://www.interrapidisimo.com/rastreo/?guia={GUIA}',
+    trackingUrlTemplate: 'https://www.interrapidisimo.com',
     displayName: 'InterRapidísimo',
   },
 };

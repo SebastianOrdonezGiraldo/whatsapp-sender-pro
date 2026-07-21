@@ -7,6 +7,7 @@ Sistema de notificaciones automáticas por WhatsApp para envíos de Servientrega
 - 📤 Envío masivo de notificaciones WhatsApp
 - 📊 Carga de archivos Excel con datos de envíos
 - 📱 Integración con WhatsApp Business API
+- ✉️ Envío opcional de la guía y el enlace de rastreo por correo mediante SMTP
 - 🔐 Autenticación de usuarios con Supabase
 - 📈 Historial de envíos y estadísticas
 - 🛡️ Seguridad RLS a nivel de base de datos
@@ -27,6 +28,7 @@ Sistema de notificaciones automáticas por WhatsApp para envíos de Servientrega
 - Node.js 18+
 - Cuenta de Supabase
 - WhatsApp Business API credentials
+- Una cuenta de correo SMTP (Hostinger para la configuración predeterminada)
 
 ## 🔧 Instalación
 
@@ -52,13 +54,15 @@ npm run dev
 # Build de producción
 npm run build
 
+# Aplicar migraciones de BD antes de desplegar las funciones
+supabase db push
+
 # Desplegar Edge Functions
 supabase functions deploy enqueue-messages
 supabase functions deploy process-message-queue
-
-# Aplicar migraciones de BD
-supabase db push
 ```
+
+Para habilitar correos, el Excel debe incluir una columna opcional llamada `Correo` o `Email`. La dirección se valida en la previsualización y el usuario puede desactivar ese canal antes de enviar.
 
 ## 🔐 Seguridad
 

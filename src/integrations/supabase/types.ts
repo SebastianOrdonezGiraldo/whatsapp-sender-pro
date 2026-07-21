@@ -76,6 +76,7 @@ export type Database = {
           job_id: string
           phone_e164: string
           guide_number: string
+          recipient_email: string | null
           recipient_name: string
           sender_name: string
           status: string
@@ -89,6 +90,10 @@ export type Database = {
           wa_message_id: string | null
           error_message: string | null
           error_code: string | null
+          email_error_message: string | null
+          email_message_id: string | null
+          email_sent_at: string | null
+          email_status: string
           created_at: string
           updated_at: string
         }
@@ -97,6 +102,7 @@ export type Database = {
           job_id: string
           phone_e164: string
           guide_number: string
+          recipient_email?: string | null
           recipient_name: string
           sender_name: string
           status?: string
@@ -110,6 +116,10 @@ export type Database = {
           wa_message_id?: string | null
           error_message?: string | null
           error_code?: string | null
+          email_error_message?: string | null
+          email_message_id?: string | null
+          email_sent_at?: string | null
+          email_status?: string
           created_at?: string
           updated_at?: string
         }
@@ -118,6 +128,7 @@ export type Database = {
           job_id?: string
           phone_e164?: string
           guide_number?: string
+          recipient_email?: string | null
           recipient_name?: string
           sender_name?: string
           status?: string
@@ -131,6 +142,10 @@ export type Database = {
           wa_message_id?: string | null
           error_message?: string | null
           error_code?: string | null
+          email_error_message?: string | null
+          email_message_id?: string | null
+          email_sent_at?: string | null
+          email_status?: string
           created_at?: string
           updated_at?: string
         }
@@ -224,11 +239,16 @@ export type Database = {
       sent_messages: {
         Row: {
           created_at: string
+          email_error_message: string | null
+          email_message_id: string | null
+          email_sent_at: string | null
+          email_status: string
           error_message: string | null
           guide_number: string
           id: string
           job_id: string | null
           phone_e164: string
+          recipient_email: string | null
           recipient_name: string
           sender_name: string
           status: string
@@ -236,11 +256,16 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          email_error_message?: string | null
+          email_message_id?: string | null
+          email_sent_at?: string | null
+          email_status?: string
           error_message?: string | null
           guide_number: string
           id?: string
           job_id?: string | null
           phone_e164: string
+          recipient_email?: string | null
           recipient_name: string
           sender_name?: string
           status?: string
@@ -248,11 +273,16 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          email_error_message?: string | null
+          email_message_id?: string | null
+          email_sent_at?: string | null
+          email_status?: string
           error_message?: string | null
           guide_number?: string
           id?: string
           job_id?: string | null
           phone_e164?: string
+          recipient_email?: string | null
           recipient_name?: string
           sender_name?: string
           status?: string
@@ -273,7 +303,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_job_queue_stats: {
+        Args: { job_uuid: string }
+        Returns: {
+          pending: number
+          processing: number
+          sent: number
+          failed: number
+          retrying: number
+          total: number
+          email_pending: number
+          email_processing: number
+          email_sent: number
+          email_failed: number
+          email_total: number
+        }
+      }
     }
     Enums: {
       [_ in never]: never

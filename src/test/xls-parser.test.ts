@@ -148,4 +148,33 @@ describe('parseXlsFile', () => {
     expect(result.rows[1].guideNumber).toBe('700184205491');
   });
 
+  it('extrae y valida la columna opcional de correo sin bloquear WhatsApp', () => {
+    const headers = ['Número de Guía', 'Destinatario', 'Número de Celular', 'Correo Electrónico'];
+    const data = [
+      ['1234567890', 'Cliente Con Correo', '3201234567', 'cliente@example.com'],
+      ['3012241226', 'Cliente Correo Malo', '3109876543', 'correo-invalido'],
+      ['2258298191', 'Cliente Sin Correo', '3001112233', ''],
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([headers, ...data]), 'Reporte');
+
+    const result = parseXlsFile(toArrayBuffer(workbook));
+
+    expect(result.errors).toEqual([]);
+    expect(result.rows).toHaveLength(3);
+    expect(result.rows[0]).toMatchObject({
+      recipientEmail: 'cliente@example.com',
+      emailValid: true,
+      phoneValid: true,
+    });
+    expect(result.rows[1]).toMatchObject({
+      recipientEmail: 'correo-invalido',
+      emailValid: false,
+      emailReason: 'Formato de correo inválido',
+      phoneValid: true,
+    });
+    expect(result.rows[2]).toMatchObject({ recipientEmail: '', emailValid: false, phoneValid: true });
+  });
+
 });

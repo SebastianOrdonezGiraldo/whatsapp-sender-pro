@@ -35,6 +35,11 @@ interface Message {
   status: string;
   error_message: string | null;
   wa_message_id: string | null;
+  recipient_email: string | null;
+  email_status: string;
+  email_message_id: string | null;
+  email_error_message: string | null;
+  email_sent_at: string | null;
   created_at: string;
 }
 
@@ -50,6 +55,11 @@ interface QueueMessage {
   next_retry_at: string | null;
   error_message: string | null;
   error_code: string | null;
+  recipient_email: string | null;
+  email_status: string;
+  email_message_id: string | null;
+  email_error_message: string | null;
+  email_sent_at: string | null;
   scheduled_at: string;
   created_at: string;
 }
@@ -67,6 +77,7 @@ export default function JobDetailPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [retryingEmails, setRetryingEmails] = useState(false);
 
   const fetchData = async () => {
     if (!jobId) {
@@ -106,7 +117,7 @@ export default function JobDetailPage() {
 
       const [jobRes, msgRes, queueRes] = await Promise.all([
         supabase.from('jobs').select('id, source_filename, total_rows, valid_rows, invalid_rows, duplicate_rows, sent_ok, sent_failed, status, assigned_to, created_at').eq('id', jobId).maybeSingle(),
-        supabase.from('sent_messages').select('id, phone_e164, guide_number, recipient_name, status, error_message, wa_message_id, created_at').eq('job_id', jobId).order('created_at'),
+        supabase.from('sent_messages').select('id, phone_e164, guide_number, recipient_name, recipient_email, status, error_message, wa_message_id, email_status, email_message_id, email_error_message, email_sent_at, created_at').eq('job_id', jobId).order('created_at'),
         supabase.from('message_queue').select('*').eq('job_id', jobId).order('created_at'),
       ]);
       const jobData = jobRes.data as unknown as Job | null;
@@ -192,6 +203,70 @@ export default function JobDetailPage() {
     }
   };
 
+  const handleRetryFailedEmails = async () => {
+    if (!jobId) return;
+
+    setRetryingEmails(true);
+    try {
+      const { data: failedEmails, error: fetchError } = await supabase
+        .from('message_queue')
+        .select('id')
+        .eq('job_id', jobId)
+        .eq('email_status', 'FAILED');
+
+      if (fetchError) throw fetchError;
+      if (!failedEmails?.length) {
+        toast.info('No hay correos fallidos para reintentar');
+        return;
+      }
+
+      const { error: queueUpdateError } = await supabase
+        .from('message_queue')
+        .update({
+          email_status: 'PENDING',
+          email_message_id: null,
+          email_error_message: null,
+          email_sent_at: null,
+        })
+        .eq('job_id', jobId)
+        .eq('email_status', 'FAILED');
+
+      if (queueUpdateError) throw queueUpdateError;
+
+      await supabase
+        .from('sent_messages')
+        .update({
+          email_status: 'PENDING',
+          email_message_id: null,
+          email_error_message: null,
+          email_sent_at: null,
+        })
+        .eq('job_id', jobId)
+        .eq('email_status', 'FAILED');
+
+      const securityHeaders = await getFunctionHeaders();
+      const { error: processError } = await supabase.functions.invoke('process-message-queue', {
+        body: { jobId },
+        headers: securityHeaders,
+        timeout: 30000,
+      });
+
+      if (processError) {
+        const message = await getEdgeErrorMessage(processError, 'No se pudo iniciar el reintento de correo.');
+        toast.warning(`Correos marcados para reintento. ${message}`);
+      } else {
+        toast.success(`Reintento de ${failedEmails.length} correo(s) procesado`);
+      }
+
+      await fetchData();
+    } catch (error) {
+      const message = await getEdgeErrorMessage(error, 'Error al reintentar los correos fallidos.');
+      toast.error(message);
+    } finally {
+      setRetryingEmails(false);
+    }
+  };
+
   const handleExportJobPdf = () => {
     if (!job) return;
 
@@ -262,6 +337,9 @@ export default function JobDetailPage() {
     );
   }
 
+  const emailsSent = queueMessages.filter(message => message.email_status === 'SENT').length;
+  const emailsFailed = queueMessages.filter(message => message.email_status === 'FAILED').length;
+
   const stats = [
     { label: 'Total', value: job.total_rows, className: '' },
     { label: 'Válidos', value: job.valid_rows, className: 'text-success' },
@@ -269,6 +347,8 @@ export default function JobDetailPage() {
     { label: 'Duplicados', value: job.duplicate_rows, className: 'text-muted-foreground' },
     { label: 'Enviados OK', value: job.sent_ok, className: 'text-success' },
     { label: 'Fallidos', value: job.sent_failed, className: 'text-destructive' },
+    { label: 'Correos OK', value: emailsSent, className: 'text-success' },
+    { label: 'Correos fallidos', value: emailsFailed, className: 'text-destructive' },
   ];
 
   const isProcessing = job?.status === 'QUEUED' || job?.status === 'PROCESSING';
@@ -353,6 +433,27 @@ export default function JobDetailPage() {
               )}
             </Button>
           )}
+          {emailsFailed > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRetryFailedEmails}
+              disabled={retryingEmails}
+              className="flex-1 sm:flex-none"
+            >
+              {retryingEmails ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Reintentando correos...
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  Reintentar correos ({emailsFailed})
+                </>
+              )}
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -374,7 +475,7 @@ export default function JobDetailPage() {
       )}
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 sm:gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2 sm:gap-3 mb-6">
         {stats.map(s => (
           <div key={s.label} className="glass-card p-3 text-center">
             <p className={`text-xl font-bold font-display ${s.className}`}>{s.value}</p>
@@ -408,9 +509,12 @@ export default function JobDetailPage() {
                 <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Estado</th>
                 <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Destinatario</th>
                 <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Celular</th>
+                <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Correo</th>
                 <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">N° Guía</th>
                 <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">WA ID</th>
                 <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Error</th>
+                <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Estado correo</th>
+                <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Error correo</th>
               </tr>
             </thead>
             <tbody>
@@ -442,11 +546,25 @@ export default function JobDetailPage() {
                   </td>
                   <td className="p-3 font-medium">{msg.recipient_name}</td>
                   <td className="p-3 font-mono text-xs">{msg.phone_e164}</td>
+                  <td className="p-3 text-xs">{msg.recipient_email || '—'}</td>
                   <td className="p-3 font-mono text-xs">{msg.guide_number}</td>
                   <td className="p-3 font-mono text-xs truncate max-w-[120px]">{msg.wa_message_id || '—'}</td>
                   <td className="p-3 text-xs text-destructive" title={msg.error_message || undefined}>
                   {msg.status === 'SENT' || !msg.error_message ? '—' : getWhatsAppFriendlyMessage(null, msg.error_message)}
                 </td>
+                  <td className="p-3">
+                    {msg.recipient_email ? (
+                      <Badge
+                        variant="outline"
+                        className={msg.email_status === 'SENT' ? 'status-sent' : msg.email_status === 'FAILED' ? 'status-failed' : 'status-pending'}
+                      >
+                        {msg.email_status}
+                      </Badge>
+                    ) : '—'}
+                  </td>
+                  <td className="p-3 text-xs text-destructive max-w-[240px] truncate" title={msg.email_error_message || undefined}>
+                    {msg.email_error_message || '—'}
+                  </td>
                 </motion.tr>
                 );
               })}
@@ -474,10 +592,13 @@ export default function JobDetailPage() {
                       <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Prioridad</th>
                       <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Destinatario</th>
                       <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Celular</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Correo</th>
                       <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">N° Guía</th>
                       <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Reintentos</th>
                       <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Próximo Intento</th>
                       <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Error</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Estado correo</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground bg-muted/95">Error correo</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -513,6 +634,7 @@ export default function JobDetailPage() {
                         </td>
                         <td className="p-3 font-medium">{msg.recipient_name}</td>
                         <td className="p-3 font-mono text-xs">{msg.phone_e164}</td>
+                        <td className="p-3 text-xs">{msg.recipient_email || '—'}</td>
                         <td className="p-3 font-mono text-xs">{msg.guide_number}</td>
                         <td className="p-3 text-xs">
                           {msg.retry_count}/{msg.max_retries}
@@ -525,6 +647,19 @@ export default function JobDetailPage() {
                         </td>
                         <td className="p-3 text-xs text-destructive max-w-[200px] truncate" title={msg.error_message || undefined}>
                           {(msg.status === 'SENT' || (!msg.error_message && !msg.error_code)) ? '—' : getWhatsAppFriendlyMessage(msg.error_code, msg.error_message)}
+                        </td>
+                        <td className="p-3">
+                          {msg.recipient_email ? (
+                            <Badge
+                              variant="outline"
+                              className={msg.email_status === 'SENT' ? 'status-sent' : msg.email_status === 'FAILED' ? 'status-failed' : 'status-pending'}
+                            >
+                              {msg.email_status}
+                            </Badge>
+                          ) : '—'}
+                        </td>
+                        <td className="p-3 text-xs text-destructive max-w-[240px] truncate" title={msg.email_error_message || undefined}>
+                          {msg.email_error_message || '—'}
                         </td>
                       </motion.tr>
                       );

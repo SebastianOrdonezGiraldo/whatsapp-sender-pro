@@ -5,6 +5,9 @@ import { detectCarrier, getTrackingUrl, type Carrier } from './carrier-detection
 export interface ParsedRow {
   guideNumber: string;
   recipient: string;
+  recipientEmail: string;
+  emailValid: boolean;
+  emailReason?: string;
   phoneRaw: string;
   phoneE164: string;
   phoneValid: boolean;
@@ -61,6 +64,16 @@ const REQUIRED_COLUMNS = {
     'teléfono',
     'tel'
   ],
+  email: [
+    'correo electronico',
+    'correo electrónico',
+    'correo destinatario',
+    'email destinatario',
+    'correo',
+    'e-mail',
+    'email',
+    'mail'
+  ],
   status: ['estado'],
 };
 
@@ -93,6 +106,20 @@ function findColumn(headers: string[], candidates: string[]): number {
   return -1;
 }
 
+function normalizeEmail(value: unknown): { email: string; valid: boolean; reason?: string } {
+  const email = String(value ?? '').trim();
+
+  if (!email) {
+    return { email: '', valid: false };
+  }
+
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    return { email, valid: false, reason: 'Formato de correo inválido' };
+  }
+
+  return { email, valid: true };
+}
+
 function isRepeatedHeaderRow(row: ParsedRow, headers: string[], colGuide: number, colRecipient: number, colPhone: number): boolean {
   return (
     normalizeHeader(row.guideNumber) === normalizeHeader(headers[colGuide]) &&
@@ -107,6 +134,7 @@ function parseCandidateRows(
   colGuide: number,
   colRecipient: number,
   colPhone: number,
+  colEmail: number,
   colStatus: number,
 ): { rows: ParsedRow[]; validPhones: number } {
   const rows: ParsedRow[] = [];
@@ -114,10 +142,14 @@ function parseCandidateRows(
 
   for (const cells of dataRows) {
     const guideNumber = String(cells[colGuide] || '').trim();
+    const normalizedEmail = normalizeEmail(colEmail !== -1 ? cells[colEmail] : '');
     
     const parsed: ParsedRow = {
       guideNumber,
       recipient: String(cells[colRecipient] || '').trim(),
+      recipientEmail: normalizedEmail.email,
+      emailValid: normalizedEmail.valid,
+      emailReason: normalizedEmail.reason,
       phoneRaw: String(cells[colPhone] || '').trim(),
       phoneE164: '',
       phoneValid: false,
@@ -167,8 +199,9 @@ function parseSheet(sheet: XLSX.WorkSheet): ParseResult {
 
     if (colGuide === -1 || colRecipient === -1 || colPhone === -1) continue;
 
+    const colEmail = findColumn(headers, REQUIRED_COLUMNS.email);
     const colStatus = findColumn(headers, REQUIRED_COLUMNS.status);
-    const candidate = parseCandidateRows(grid.slice(rowIndex + 1), headers, colGuide, colRecipient, colPhone, colStatus);
+    const candidate = parseCandidateRows(grid.slice(rowIndex + 1), headers, colGuide, colRecipient, colPhone, colEmail, colStatus);
 
     if (candidate.rows.length === 0) {
       sawHeaderWithoutRows = true;

@@ -2,7 +2,9 @@
 // @ts-nocheck - This is a Deno edge function, not a Node.js file
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { detectCarrier, getCarrierConfig, type Carrier } from "../_shared/carrier-utils.ts";
+import nodemailer from "npm:nodemailer@7.0.10";
+import { detectCarrier, getCarrierConfig, getTrackingUrl, type Carrier } from "../_shared/carrier-utils.ts";
+import { buildGuideEmailContent } from "../_shared/email-utils.ts";
 import { computeNextRetryAt } from "../_shared/retry-utils.ts";
 import {
   calculateDelayPerMessage,
@@ -25,6 +27,11 @@ interface QueueMessage {
   max_retries: number;
   carrier?: Carrier;
   tracking_url?: string;
+  recipient_email?: string | null;
+  email_status?: "NOT_REQUESTED" | "PENDING" | "PROCESSING" | "SENT" | "FAILED";
+  email_message_id?: string | null;
+  email_error_message?: string | null;
+  email_sent_at?: string | null;
 }
 
 interface ProcessRequest {
@@ -39,6 +46,131 @@ interface QueueStats {
   failed: number;
   retrying: number;
   total: number;
+  email_pending?: number;
+  email_processing?: number;
+  email_sent?: number;
+  email_failed?: number;
+  email_total?: number;
+}
+
+interface SmtpConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  password: string;
+  from: string;
+  fromName: string;
+  replyTo?: string;
+}
+
+interface EmailDeliveryResult {
+  status: "NOT_REQUESTED" | "PENDING" | "PROCESSING" | "SENT" | "FAILED";
+  messageId: string | null;
+  error: string | null;
+  sentAt: string | null;
+}
+
+function getSmtpConfig(): { config: SmtpConfig | null; error: string | null } {
+  const user = Deno.env.get("SMTP_USER")?.trim();
+  const password = Deno.env.get("SMTP_PASSWORD");
+
+  if (!user || !password) {
+    return {
+      config: null,
+      error: "SMTP no configurado. Defina SMTP_USER y SMTP_PASSWORD en los secretos de Supabase.",
+    };
+  }
+
+  const port = Number(Deno.env.get("SMTP_PORT") || "465");
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    return { config: null, error: "SMTP_PORT no es válido." };
+  }
+
+  return {
+    config: {
+      host: Deno.env.get("SMTP_HOST")?.trim() || "smtp.hostinger.com",
+      port,
+      secure: (Deno.env.get("SMTP_SECURE") || (port === 465 ? "true" : "false")).toLowerCase() === "true",
+      user,
+      password,
+      from: Deno.env.get("SMTP_FROM")?.trim() || user,
+      fromName: Deno.env.get("SMTP_FROM_NAME")?.trim() || Deno.env.get("SENDER_NAME") || "Import Corporal Medical",
+      replyTo: Deno.env.get("SMTP_REPLY_TO")?.trim() || undefined,
+    },
+    error: null,
+  };
+}
+
+async function sendGuideEmail(
+  message: QueueMessage,
+  smtpConfig: SmtpConfig | null,
+  smtpConfigError: string | null
+): Promise<EmailDeliveryResult> {
+  if (!message.recipient_email) {
+    return { status: "NOT_REQUESTED", messageId: null, error: null, sentAt: null };
+  }
+
+  if (!smtpConfig) {
+    return {
+      status: "FAILED",
+      messageId: null,
+      error: smtpConfigError || "SMTP no configurado.",
+      sentAt: null,
+    };
+  }
+
+  try {
+    const carrierInfo = message.carrier
+      ? getCarrierConfig(message.carrier)
+      : detectCarrier(message.guide_number);
+    // Rebuild this server-side instead of trusting the persisted URL, which can
+    // be edited through the user-scoped queue API.
+    const trackingUrl = getTrackingUrl(message.guide_number, carrierInfo);
+    const content = buildGuideEmailContent({
+      recipientName: message.recipient_name,
+      guideNumber: message.guide_number,
+      carrierName: carrierInfo?.displayName || "Transportadora",
+      trackingUrl,
+      senderName: message.sender_name,
+    });
+    const transporter = nodemailer.createTransport({
+      host: smtpConfig.host,
+      port: smtpConfig.port,
+      secure: smtpConfig.secure,
+      requireTLS: !smtpConfig.secure,
+      auth: {
+        user: smtpConfig.user,
+        pass: smtpConfig.password,
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+    });
+    const info = await transporter.sendMail({
+      from: { name: smtpConfig.fromName, address: smtpConfig.from },
+      to: message.recipient_email,
+      replyTo: smtpConfig.replyTo,
+      subject: content.subject,
+      text: content.text,
+      html: content.html,
+    });
+
+    return {
+      status: "SENT",
+      messageId: info.messageId || null,
+      error: null,
+      sentAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error(`SMTP delivery failed for queue message ${message.id}:`, error);
+    return {
+      status: "FAILED",
+      messageId: null,
+      error: `No se pudo enviar el correo: ${(error as Error).message}`,
+      sentAt: null,
+    };
+  }
 }
 
 // Send WhatsApp message via Graph API with carrier-specific template
@@ -175,6 +307,67 @@ serve(async (req) => {
       );
     }
 
+    const { config: smtpConfig, error: smtpConfigError } = getSmtpConfig();
+
+    const deliverPendingEmail = async (message: QueueMessage): Promise<EmailDeliveryResult> => {
+      if (!message.recipient_email) {
+        return { status: "NOT_REQUESTED", messageId: null, error: null, sentAt: null };
+      }
+
+      if (message.email_status !== "PENDING") {
+        return {
+          status: message.email_status || "FAILED",
+          messageId: message.email_message_id || null,
+          error: message.email_error_message || null,
+          sentAt: message.email_sent_at || null,
+        };
+      }
+
+      const { data: claimedEmailRows, error: claimEmailError } = await supabase
+        .from("message_queue")
+        .update({ email_status: "PROCESSING", email_error_message: null })
+        .eq("id", message.id)
+        .eq("email_status", "PENDING")
+        .select("id")
+        .limit(1);
+
+      if (claimEmailError) {
+        console.error(`Failed to claim email for queue message ${message.id}:`, claimEmailError);
+        return {
+          status: "FAILED",
+          messageId: null,
+          error: "No se pudo reservar el envío del correo.",
+          sentAt: null,
+        };
+      }
+
+      if (!claimedEmailRows?.length) {
+        return {
+          status: message.email_status || "PROCESSING",
+          messageId: message.email_message_id || null,
+          error: message.email_error_message || null,
+          sentAt: message.email_sent_at || null,
+        };
+      }
+
+      const delivery = await sendGuideEmail(message, smtpConfig, smtpConfigError);
+      const { error: emailUpdateError } = await supabase
+        .from("message_queue")
+        .update({
+          email_status: delivery.status,
+          email_message_id: delivery.messageId,
+          email_error_message: delivery.error,
+          email_sent_at: delivery.sentAt,
+        })
+        .eq("id", message.id);
+
+      if (emailUpdateError) {
+        console.error(`Failed to persist email result for queue message ${message.id}:`, emailUpdateError);
+      }
+
+      return delivery;
+    };
+
     // Get rate limit configuration
     const { data: rateLimitConfig } = await supabase
       .from("rate_limit_config")
@@ -188,6 +381,7 @@ serve(async (req) => {
     const nowIso = new Date().toISOString();
     const processingStaleMs = Number(Deno.env.get("PROCESSING_STALE_MS") || "300000");
     let recoveredStaleProcessing = 0;
+    let recoveredStaleEmailProcessing = 0;
     const userIsAdmin = user.app_metadata?.role === "admin";
 
     const syncJobFromQueue = async (targetJobId: string): Promise<QueueStats | null> => {
@@ -252,6 +446,23 @@ serve(async (req) => {
       } else {
         recoveredStaleProcessing = recoveredRows?.length ?? 0;
       }
+
+      const { data: recoveredEmailRows, error: recoverEmailError } = await supabase
+        .from("message_queue")
+        .update({
+          email_status: "PENDING",
+          email_error_message: "Correo recuperado automáticamente tras quedar atascado en PROCESSING.",
+        })
+        .eq("job_id", jobId)
+        .eq("email_status", "PROCESSING")
+        .lt("updated_at", staleCutoffIso)
+        .select("id");
+
+      if (recoverEmailError) {
+        console.error(`Failed to recover stale email rows for job ${jobId}:`, recoverEmailError);
+      } else {
+        recoveredStaleEmailProcessing = recoveredEmailRows?.length ?? 0;
+      }
     }
 
     // Filter by specific job if specified
@@ -302,6 +513,8 @@ serve(async (req) => {
     let retrying = 0;
     let skippedAlreadyClaimed = 0;
     let fetchedAtLeastOneMessage = false;
+    let emailsSent = 0;
+    let emailsFailed = 0;
 
     // Calculate delay between messages to respect rate limit
     const delayPerMessage = calculateDelayPerMessage(config);
@@ -397,6 +610,13 @@ serve(async (req) => {
           waGraphVersion
         );
 
+        const emailDelivery = await deliverPendingEmail(message);
+        if (emailDelivery.status === "SENT" && message.email_status === "PENDING") {
+          emailsSent++;
+        } else if (emailDelivery.status === "FAILED" && message.email_status === "PENDING") {
+          emailsFailed++;
+        }
+
         processed++;
         if (remainingRequestedMessages !== null) {
           remainingRequestedMessages = Math.max(0, remainingRequestedMessages - 1);
@@ -420,11 +640,16 @@ serve(async (req) => {
               phone_e164: message.phone_e164,
               guide_number: message.guide_number,
               recipient_name: message.recipient_name,
+              recipient_email: message.recipient_email || null,
               sender_name: message.sender_name,
               template_name: waTemplateName,
               wa_message_id: result.messageId,
               status: "SENT",
               error_message: null,
+              email_status: emailDelivery.status,
+              email_message_id: emailDelivery.messageId,
+              email_error_message: emailDelivery.error,
+              email_sent_at: emailDelivery.sentAt,
             },
             { onConflict: "job_id,phone_e164,guide_number" }
           );
@@ -475,11 +700,16 @@ serve(async (req) => {
                 phone_e164: message.phone_e164,
                 guide_number: message.guide_number,
                 recipient_name: message.recipient_name,
+                recipient_email: message.recipient_email || null,
                 sender_name: message.sender_name,
                 template_name: waTemplateName,
                 wa_message_id: null,
                 status: "FAILED",
                 error_message: result.error,
+                email_status: emailDelivery.status,
+                email_message_id: emailDelivery.messageId,
+                email_error_message: emailDelivery.error,
+                email_sent_at: emailDelivery.sentAt,
               },
               { onConflict: "job_id,phone_e164,guide_number" }
             );
@@ -495,6 +725,58 @@ serve(async (req) => {
       }
     }
 
+    // Process email-only retries without resetting the WhatsApp status. This avoids
+    // resending an already delivered WhatsApp notification when only SMTP failed.
+    let emailOnlyProcessed = 0;
+    while (Date.now() - processStartedAt < processLoopMaxRuntimeMs) {
+      const emailBatchLimit = resolveBatchLimit(config.batch_size, null);
+      const { data: pendingEmailMessages, error: pendingEmailError } = await baseQueueQuery()
+        .eq("email_status", "PENDING")
+        .in("status", ["SENT", "FAILED"])
+        .limit(emailBatchLimit);
+
+      if (pendingEmailError) {
+        console.error("Failed to load pending email deliveries:", pendingEmailError);
+        break;
+      }
+
+      if (!pendingEmailMessages?.length) {
+        break;
+      }
+
+      for (const message of pendingEmailMessages) {
+        if (Date.now() - processStartedAt >= processLoopMaxRuntimeMs) {
+          break;
+        }
+
+        const emailDelivery = await deliverPendingEmail(message);
+        emailOnlyProcessed++;
+
+        if (emailDelivery.status === "SENT") {
+          emailsSent++;
+        } else if (emailDelivery.status === "FAILED") {
+          emailsFailed++;
+        }
+
+        const { error: sentMessageEmailUpdateError } = await supabase
+          .from("sent_messages")
+          .update({
+            recipient_email: message.recipient_email || null,
+            email_status: emailDelivery.status,
+            email_message_id: emailDelivery.messageId,
+            email_error_message: emailDelivery.error,
+            email_sent_at: emailDelivery.sentAt,
+          })
+          .eq("job_id", message.job_id)
+          .eq("phone_e164", message.phone_e164)
+          .eq("guide_number", message.guide_number);
+
+        if (sentMessageEmailUpdateError) {
+          console.error(`Failed to sync email result to sent_messages for ${message.id}:`, sentMessageEmailUpdateError);
+        }
+      }
+    }
+
     const runtimeBudgetReached = Date.now() - processStartedAt >= processLoopMaxRuntimeMs;
 
     // Update job statistics if jobId was specified
@@ -506,6 +788,9 @@ serve(async (req) => {
     const hasMorePending = queueStats
       ? queueStats.pending > 0 || queueStats.retrying > 0 || queueStats.processing > 0
       : false;
+    const hasMoreEmailPending = queueStats
+      ? (queueStats.email_pending || 0) > 0 || (queueStats.email_processing || 0) > 0
+      : false;
 
     return new Response(
       JSON.stringify({
@@ -515,12 +800,19 @@ serve(async (req) => {
         retrying,
         skippedAlreadyClaimed,
         recoveredStaleProcessing,
+        recoveredStaleEmailProcessing,
+        emailsSent,
+        emailsFailed,
+        emailOnlyProcessed,
         queueStats,
         hasMorePending,
+        hasMoreEmailPending,
         runtimeBudgetReached,
         requestedLimitReached: remainingRequestedMessages !== null && remainingRequestedMessages <= 0,
         message: fetchedAtLeastOneMessage
-          ? `Processed ${processed} messages: ${sent} sent, ${failed} failed, ${retrying} retrying, ${skippedAlreadyClaimed} skipped (claimed by another worker), ${recoveredStaleProcessing} stale recovered`
+          ? `Processed ${processed} messages: ${sent} sent, ${failed} failed, ${retrying} retrying; emails: ${emailsSent} sent, ${emailsFailed} failed`
+          : emailOnlyProcessed > 0
+          ? `Processed ${emailOnlyProcessed} pending email deliveries: ${emailsSent} sent, ${emailsFailed} failed`
           : "No pending messages",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -83,7 +83,7 @@ serve(async (req) => {
     const finalSenderName = senderName || senderNameEnv;
 
     // Normalize rows and remove duplicated keys in the same payload
-    const { normalizedRows, duplicatesSkipped, invalidRowsSkipped } = normalizeRows(rows);
+    const { normalizedRows, duplicatesSkipped, invalidRowsSkipped, invalidEmailsSkipped } = normalizeRows(rows);
 
     if (!normalizedRows.length) {
       await markJobAsFailedEnqueue(supabase, jobId, "no_valid_rows_after_normalization");
@@ -93,6 +93,7 @@ serve(async (req) => {
           message: "No hay filas válidas para encolar. El envío quedó marcado como FALLIDO_ENCOLADO.",
           duplicatesSkipped,
           invalidRowsSkipped,
+          invalidEmailsSkipped,
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -196,6 +197,7 @@ serve(async (req) => {
         received: rows.length,
         duplicatesSkipped,
         invalidRowsSkipped,
+        invalidEmailsSkipped,
         jobId,
         status: autoProcess ? "processing" : "queued",
         processResult,

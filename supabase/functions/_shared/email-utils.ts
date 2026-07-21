@@ -1,6 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck - Shared between Deno edge functions and test environment
 import { EMAIL_LOGO_SRC } from './email-logo.ts';
+import { EMAIL_ICON_SRCS } from './email-icons.ts';
 
 export interface GuideEmailContentInput {
   recipientName: string;
@@ -104,11 +105,7 @@ export function buildGuideEmailContent(input: GuideEmailContentInput): {
                 <table role="presentation" width="520" cellspacing="0" cellpadding="0" border="0" bgcolor="#ffffff" class="content-card" style="width:520px;max-width:520px;background:#ffffff;border:1px solid #eceef0;border-radius:15px;box-shadow:0 9px 24px rgba(54,61,71,.10);overflow:hidden">
                   <tr>
                     <td align="center" style="padding:20px 34px 10px">
-                      <table role="presentation" width="66" height="66" cellspacing="0" cellpadding="0" border="0" style="width:66px;height:66px;margin:0 auto">
-                        <tr>
-                          <td align="center" valign="middle" bgcolor="#f3f8e9" style="width:66px;height:66px;border:1px solid #dce9c5;border-radius:50%;color:#78b52c;font-size:31px;line-height:66px">&#128230;</td>
-                        </tr>
-                      </table>
+                      <img src="${EMAIL_ICON_SRCS.packageCheck}" width="76" height="76" alt="Guía creada" style="display:block;width:76px;height:76px;margin:0 auto;border:0;outline:none;text-decoration:none">
                       <h1 style="margin:14px 0 18px;color:#263241;font-size:25px;line-height:32px;font-weight:700;letter-spacing:-.3px">¡Tu guía de envío fue creada!</h1>
                       <p style="margin:0 0 7px;color:#4b5563;font-size:14px;line-height:22px">Hola <strong style="color:#7a2496">${recipientName}</strong>,</p>
                       <p style="margin:0;color:#4b5563;font-size:14px;line-height:22px">Tu pedido ya está en camino. Aquí tienes los datos para que puedas rastrear tu envío.</p>
@@ -119,9 +116,7 @@ export function buildGuideEmailContent(input: GuideEmailContentInput): {
                       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#fafafa" style="width:100%;background:#fafafa;border:1px solid #f0f0f1;border-radius:12px;overflow:hidden">
                         <tr>
                           <td width="62" align="center" style="padding:13px 8px 13px 16px;border-bottom:1px solid #eceef0">
-                            <table role="presentation" width="42" height="42" cellspacing="0" cellpadding="0" border="0">
-                              <tr><td align="center" valign="middle" bgcolor="#ffffff" style="width:42px;height:42px;border:1px solid #e7e1eb;border-radius:50%;color:#8a2aa5;font-size:21px;line-height:42px">&#128196;</td></tr>
-                            </table>
+                            <img src="${EMAIL_ICON_SRCS.document}" width="46" height="46" alt="Número de guía" style="display:block;width:46px;height:46px;border:0;outline:none;text-decoration:none">
                           </td>
                           <td style="padding:13px 16px 13px 4px;border-bottom:1px solid #eceef0">
                             <p style="margin:0 0 3px;color:#69727d;font-size:12px;line-height:16px">Número de guía:</p>
@@ -130,9 +125,7 @@ export function buildGuideEmailContent(input: GuideEmailContentInput): {
                         </tr>
                         <tr>
                           <td width="62" align="center" style="padding:13px 8px 13px 16px">
-                            <table role="presentation" width="42" height="42" cellspacing="0" cellpadding="0" border="0">
-                              <tr><td align="center" valign="middle" bgcolor="#ffffff" style="width:42px;height:42px;border:1px solid #e7e1eb;border-radius:50%;color:#8a2aa5;font-size:21px;line-height:42px">&#128666;</td></tr>
-                            </table>
+                            <img src="${EMAIL_ICON_SRCS.truck}" width="46" height="46" alt="Transportadora" style="display:block;width:46px;height:46px;border:0;outline:none;text-decoration:none">
                           </td>
                           <td style="padding:13px 16px 13px 4px">
                             <p style="margin:0 0 3px;color:#69727d;font-size:12px;line-height:16px">Transportadora:</p>
@@ -150,7 +143,7 @@ export function buildGuideEmailContent(input: GuideEmailContentInput): {
                   <tr>
                     <td align="center" style="padding:0 24px 18px">
                       <p style="margin:0;color:#4f5965;font-size:12px;line-height:19px">
-                        <span style="color:#78b52c;font-size:14px">&#9685;</span>&nbsp;
+                        <img src="${EMAIL_ICON_SRCS.whatsapp}" width="20" height="20" alt="WhatsApp" style="display:inline-block;width:20px;height:20px;border:0;vertical-align:middle">&nbsp;
                         ¿Tienes dudas con tu envío?
                         <a href="${WHATSAPP_URL}" target="_blank" rel="noopener noreferrer" style="color:#4f5965;font-weight:700;text-decoration:none">Contáctanos, estamos para ayudarte.</a>
                       </p>
@@ -161,19 +154,19 @@ export function buildGuideEmailContent(input: GuideEmailContentInput): {
                       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
                         <tr>
                           <td width="25%" align="center" valign="top" class="benefit-cell" style="padding:5px 4px;color:#39434e">
-                            <div style="color:#78b52c;font-size:25px;line-height:28px">&#10003;</div>
+                            <img src="${EMAIL_ICON_SRCS.shield}" width="38" height="38" alt="Seguridad" style="display:block;width:38px;height:38px;margin:0 auto;border:0">
                             <div style="margin-top:5px;font-size:10px;line-height:13px;font-weight:700">Seguridad<br>en cada envío</div>
                           </td>
                           <td width="25%" align="center" valign="top" class="benefit-cell" style="padding:5px 4px;color:#39434e">
-                            <div style="color:#78b52c;font-size:25px;line-height:28px">&#9719;</div>
+                            <img src="${EMAIL_ICON_SRCS.stopwatch}" width="38" height="38" alt="Entregas puntuales" style="display:block;width:38px;height:38px;margin:0 auto;border:0">
                             <div style="margin-top:5px;font-size:10px;line-height:13px;font-weight:700">Entregas<br>puntuales</div>
                           </td>
                           <td width="25%" align="center" valign="top" class="benefit-cell" style="padding:5px 4px;color:#39434e">
-                            <div style="color:#78b52c;font-size:25px;line-height:28px">&#9633;</div>
+                            <img src="${EMAIL_ICON_SRCS.box}" width="38" height="38" alt="Empaque seguro" style="display:block;width:38px;height:38px;margin:0 auto;border:0">
                             <div style="margin-top:5px;font-size:10px;line-height:13px;font-weight:700">Empaque<br>seguro</div>
                           </td>
                           <td width="25%" align="center" valign="top" class="benefit-cell" style="padding:5px 4px;color:#39434e">
-                            <div style="color:#78b52c;font-size:27px;line-height:28px">&#9825;</div>
+                            <img src="${EMAIL_ICON_SRCS.heart}" width="38" height="38" alt="Comprometidos contigo" style="display:block;width:38px;height:38px;margin:0 auto;border:0">
                             <div style="margin-top:5px;font-size:10px;line-height:13px;font-weight:700">Comprometidos<br>contigo</div>
                           </td>
                         </tr>
@@ -189,10 +182,14 @@ export function buildGuideEmailContent(input: GuideEmailContentInput): {
                 <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto">
                   <tr>
                     <td style="padding:0 5px">
-                      <a href="${INSTAGRAM_URL}" target="_blank" rel="noopener noreferrer" aria-label="Instagram" style="display:block;width:30px;height:30px;border-radius:50%;background:#8a2aa5;color:#ffffff;font-size:10px;line-height:30px;font-weight:700;text-align:center;text-decoration:none">IG</a>
+                      <a href="${INSTAGRAM_URL}" target="_blank" rel="noopener noreferrer" aria-label="Instagram" style="display:block;width:34px;height:34px;text-decoration:none">
+                        <img src="${EMAIL_ICON_SRCS.instagram}" width="34" height="34" alt="Instagram" style="display:block;width:34px;height:34px;border:0;outline:none;text-decoration:none">
+                      </a>
                     </td>
                     <td style="padding:0 5px">
-                      <a href="${WHATSAPP_URL}" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" style="display:block;width:30px;height:30px;border-radius:50%;background:#78b52c;color:#ffffff;font-size:10px;line-height:30px;font-weight:700;text-align:center;text-decoration:none">WA</a>
+                      <a href="${WHATSAPP_URL}" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" style="display:block;width:34px;height:34px;text-decoration:none">
+                        <img src="${EMAIL_ICON_SRCS.whatsapp}" width="34" height="34" alt="WhatsApp" style="display:block;width:34px;height:34px;border:0;outline:none;text-decoration:none">
+                      </a>
                     </td>
                   </tr>
                 </table>
@@ -202,7 +199,7 @@ export function buildGuideEmailContent(input: GuideEmailContentInput): {
               <td align="center" style="padding:8px 70px 22px;background-color:#fbfcfb">
                 <div style="height:1px;line-height:1px;background:#bfd58b;font-size:1px">&nbsp;</div>
                 <p style="margin:12px 0 2px;color:#78a92e;font-size:12px;line-height:17px;font-weight:700">${senderName}</p>
-                <p style="margin:0;color:#4b5563;font-size:11px;line-height:17px">Gracias por confiar en nosotros. <span style="color:#8a2aa5">&#9829;</span></p>
+                <p style="margin:0;color:#4b5563;font-size:11px;line-height:17px">Gracias por confiar en nosotros. <img src="${EMAIL_ICON_SRCS.heart}" width="15" height="15" alt="" style="display:inline-block;width:15px;height:15px;border:0;vertical-align:middle"></p>
               </td>
             </tr>
           </table>

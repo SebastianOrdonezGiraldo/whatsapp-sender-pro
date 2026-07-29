@@ -15,6 +15,13 @@ import {
   resolveRequestedMaxMessages,
   type RateLimitConfig,
 } from "../_shared/process-queue-utils.ts";
+import {
+  DEFAULT_PROCESS_CONTINUE_MAX_DEPTH,
+  canContinueAtDepth,
+  decideQueueContinuation,
+  resolveContinueDepth,
+  triggerProcessQueueContinuation,
+} from "../_shared/queue-continuation-utils.ts";
 import { validateApiKey, validateJWT, validateJobOwnership, handleCorsOptions, corsHeaders } from "../_shared/api-key-validator.ts";
 import { getWhatsAppFriendlyMessage } from "../_shared/wa-error-messages.ts";
 
@@ -39,6 +46,7 @@ interface QueueMessage {
 interface ProcessRequest {
   jobId?: string; // Optional: process specific job, or all pending if omitted
   maxMessages?: number; // Optional: limit number of messages to process
+  continueDepth?: number; // Internal: depth of self-chained continuation calls
 }
 
 interface QueueStats {
@@ -390,12 +398,18 @@ serve(async (req) => {
 
     const config: RateLimitConfig = normalizeRateLimitConfig(rateLimitConfig);
 
-    const { jobId, maxMessages } = (await req.json().catch(() => ({}))) as ProcessRequest;
+    const { jobId, maxMessages, continueDepth: rawContinueDepth } = (await req.json().catch(() => ({}))) as ProcessRequest;
+    const continueDepth = resolveContinueDepth(rawContinueDepth);
+    const maxContinueDepth = Number(
+      Deno.env.get("PROCESS_CONTINUE_MAX_DEPTH") || String(DEFAULT_PROCESS_CONTINUE_MAX_DEPTH)
+    );
     const nowIso = new Date().toISOString();
     const processingStaleMs = Number(Deno.env.get("PROCESSING_STALE_MS") || "300000");
     let recoveredStaleProcessing = 0;
     let recoveredStaleEmailProcessing = 0;
     const userIsAdmin = user.app_metadata?.role === "admin";
+    const requestAuthorization = req.headers.get("authorization");
+    const requestApiKey = req.headers.get("X-API-Key") || Deno.env.get("API_KEY");
 
     const syncJobFromQueue = async (targetJobId: string): Promise<QueueStats | null> => {
       const { data: queueStatsData, error: queueStatsError } = await supabase.rpc("get_job_queue_stats", {
@@ -805,6 +819,43 @@ serve(async (req) => {
       ? (queueStats.email_pending || 0) > 0 || (queueStats.email_processing || 0) > 0
       : false;
 
+    let continuationScheduled = false;
+    let continuationReason: string | null = null;
+    const continuationDecision = decideQueueContinuation(queueStats, {
+      runtimeBudgetReached,
+    });
+
+    if (
+      jobId &&
+      continuationDecision.shouldContinue &&
+      canContinueAtDepth(continueDepth, maxContinueDepth) &&
+      requestAuthorization &&
+      requestApiKey
+    ) {
+      const triggerResult = triggerProcessQueueContinuation({
+        supabaseUrl,
+        authorization: requestAuthorization,
+        apiKey: requestApiKey,
+        jobId,
+        continueDepth: continueDepth + 1,
+        delayMs: continuationDecision.delayMs,
+      });
+      continuationScheduled = triggerResult.scheduled;
+      continuationReason = continuationDecision.reason;
+      if (continuationScheduled) {
+        console.log(
+          `Scheduled queue continuation for job ${jobId} (depth ${continueDepth + 1}, delay ${continuationDecision.delayMs}ms, reason=${continuationDecision.reason})`
+        );
+      }
+    } else if (jobId && continuationDecision.shouldContinue && !canContinueAtDepth(continueDepth, maxContinueDepth)) {
+      continuationReason = "max_continue_depth_reached";
+      console.warn(
+        `Queue continuation skipped for job ${jobId}: max depth ${maxContinueDepth} reached`
+      );
+    } else if (jobId && continuationDecision.shouldContinue) {
+      continuationReason = "missing_auth_for_continuation";
+    }
+
     return new Response(
       JSON.stringify({
         processed,
@@ -821,6 +872,9 @@ serve(async (req) => {
         hasMorePending,
         hasMoreEmailPending,
         runtimeBudgetReached,
+        continuationScheduled,
+        continuationReason,
+        continueDepth,
         requestedLimitReached: remainingRequestedMessages !== null && remainingRequestedMessages <= 0,
         message: fetchedAtLeastOneMessage
           ? `Processed ${processed} messages: ${sent} sent, ${failed} failed, ${retrying} retrying; emails: ${emailsSent} sent, ${emailsFailed} failed`

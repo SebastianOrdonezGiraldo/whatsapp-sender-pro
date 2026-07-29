@@ -192,6 +192,7 @@ export default function PreviewPage() {
 
         const processed = data?.processResult;
         const processTriggerError = data?.processTriggerError;
+        const processTriggerScheduled = Boolean(data?.processTriggerScheduled);
         const hasMorePending = Boolean(processed?.hasMorePending || processed?.hasMoreEmailPending);
         const remainingInQueue =
           (processed?.queueStats?.pending || 0) +
@@ -216,7 +217,7 @@ export default function PreviewPage() {
 
         if (processTriggerError) {
           toast.warning(
-            `${data?.enqueued ?? sendableRows.length} mensajes encolados. Use "Procesar cola" en esta página para iniciar el envío.${skippedSuffix}`,
+            `${data?.enqueued ?? sendableRows.length} mensajes encolados. Use "Procesar cola" en el detalle del envío para iniciar.${skippedSuffix}`,
             { duration: 6000 }
           );
         } else if (processed) {
@@ -224,13 +225,17 @@ export default function PreviewPage() {
             const remainingSuffix = remainingInQueue > 0
               ? ` Quedan ${remainingInQueue} en cola.`
               : '';
-            toast.warning(
-              `Procesados por ahora: ${processed.sent || 0} WhatsApp enviados, ${processed.failed || 0} fallidos.${emailSummary}${remainingSuffix} Use "Procesar cola" para continuar.${skippedSuffix}`,
+            toast.success(
+              `Procesados por ahora: ${processed.sent || 0} WhatsApp enviados, ${processed.failed || 0} fallidos.${emailSummary}${remainingSuffix} El resto continúa automáticamente.${skippedSuffix}`,
               { duration: 7000 }
             );
           } else {
             toast.success(`Listo: ${processed.sent || 0} WhatsApp enviados, ${processed.failed || 0} fallidos.${emailSummary} Puede reintentar los fallidos aquí.${skippedSuffix}`);
           }
+        } else if (processTriggerScheduled) {
+          toast.success(
+            `${data?.enqueued || sendableRows.length} mensajes encolados. El envío continúa automáticamente.${skippedSuffix}`
+          );
         } else {
           toast.success(`${data?.enqueued || 0} mensajes encolados. El envío se realiza automáticamente.${skippedSuffix}`);
         }

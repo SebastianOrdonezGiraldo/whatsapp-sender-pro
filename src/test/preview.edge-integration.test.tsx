@@ -101,7 +101,7 @@ describe("Preview edge integration", () => {
     setupCommonMocks();
   });
 
-  it("muestra warning de procesamiento parcial cuando quedan mensajes en cola", async () => {
+  it("muestra aviso de procesamiento parcial cuando quedan mensajes en cola", async () => {
     seedPreviewSession();
 
     const sentMessagesInMock = vi.fn().mockResolvedValue({ data: [], error: null });
@@ -154,14 +154,14 @@ describe("Preview edge integration", () => {
     });
 
     await waitFor(() => {
-      expect(toastWarningMock).toHaveBeenCalledWith(
+      expect(toastSuccessMock).toHaveBeenCalledWith(
         expect.stringContaining("Procesados por ahora"),
         expect.objectContaining({ duration: 7000 })
       );
     });
 
-    expect(toastWarningMock).toHaveBeenCalledWith(
-      expect.stringContaining("Quedan 2 en cola"),
+    expect(toastSuccessMock).toHaveBeenCalledWith(
+      expect.stringContaining("continúa automáticamente"),
       expect.anything()
     );
     expect(navigateMock).toHaveBeenCalledWith("/history/job-1", { state: { fromSend: true } });

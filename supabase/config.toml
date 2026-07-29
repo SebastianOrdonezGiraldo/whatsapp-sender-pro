@@ -1,5 +1,9 @@
 project_id = "lrknetzftkezvqmcincb"
 
+# Keep workers alive so EdgeRuntime.waitUntil can finish queue continuation
+# after the HTTP response is returned (local CLI default terminates too early).
+[edge_runtime]
+policy = "per_worker"
 
 [functions.enqueue-messages]
 # JWT is validated inside the function (API key + validateJWT helper)

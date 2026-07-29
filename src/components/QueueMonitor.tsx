@@ -21,13 +21,32 @@ interface QueueMonitorProps {
   jobId: string;
   autoRefresh?: boolean;
   refreshInterval?: number;
+  /** Automatically invoke process-message-queue while work remains. */
+  autoProcess?: boolean;
+  autoProcessInterval?: number;
+  autoProcessInitialDelay?: number;
   onStatsUpdate?: (stats: QueueStats) => void;
+}
+
+function hasRemainingQueueWork(stats: QueueStats): boolean {
+  return stats.pending > 0 || stats.retrying > 0 || stats.processing > 0;
+}
+
+/** Client safety-net: only kick when the queue is idle but unfinished. */
+function shouldClientAutoProcess(stats: QueueStats): boolean {
+  if (stats.processing > 0) {
+    return false;
+  }
+  return stats.pending > 0 || stats.retrying > 0;
 }
 
 export default function QueueMonitor({
   jobId,
   autoRefresh = true,
   refreshInterval = 3000,
+  autoProcess = true,
+  autoProcessInterval = 12000,
+  autoProcessInitialDelay = 2500,
   onStatsUpdate,
 }: QueueMonitorProps) {
   const [stats, setStats] = useState<QueueStats | null>(null);
@@ -35,6 +54,7 @@ export default function QueueMonitor({
   const [processing, setProcessing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const processingRef = useRef(false);
+  const statsRef = useRef<QueueStats | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -49,6 +69,7 @@ export default function QueueMonitor({
 
         if (data && isMounted) {
           const statsData = data as QueueStats;
+          statsRef.current = statsData;
           setStats(statsData);
           setLastUpdate(new Date());
           onStatsUpdate?.(statsData);
@@ -70,7 +91,7 @@ export default function QueueMonitor({
     return () => { isMounted = false; };
   }, [jobId, autoRefresh, refreshInterval, onStatsUpdate]);
 
-  const handleProcessQueue = async () => {
+  const processQueue = async (options?: { silent?: boolean }) => {
     if (processingRef.current) {
       return;
     }
@@ -91,14 +112,48 @@ export default function QueueMonitor({
         throw new Error(errorMsg);
       }
 
-      toast.success(data?.message || 'Cola procesada correctamente');
+      if (!options?.silent) {
+        toast.success(data?.message || 'Cola procesada correctamente');
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al procesar la cola.';
-      toast.error(message);
+      if (!options?.silent) {
+        toast.error(message);
+      } else {
+        console.error('Auto process queue failed:', err);
+      }
     } finally {
       processingRef.current = false;
       setProcessing(false);
     }
+  };
+
+  useEffect(() => {
+    if (!autoProcess) {
+      return;
+    }
+
+    const tick = () => {
+      const current = statsRef.current;
+      if (!current || !shouldClientAutoProcess(current) || processingRef.current) {
+        return;
+      }
+      void processQueue({ silent: true });
+    };
+
+    // Safety net for retries and interrupted server-side chaining.
+    // Avoid racing an active PROCESSING worker (server self-chain handles that).
+    const initialTimer = window.setTimeout(tick, autoProcessInitialDelay);
+    const interval = window.setInterval(tick, autoProcessInterval);
+
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(interval);
+    };
+  }, [jobId, autoProcess, autoProcessInterval, autoProcessInitialDelay]);
+
+  const handleProcessQueue = async () => {
+    await processQueue({ silent: false });
   };
 
   if (loading || !stats) {
@@ -113,8 +168,8 @@ export default function QueueMonitor({
 
   const completedCount = stats.sent + stats.failed;
   const progressPercentage = stats.total > 0 ? (completedCount / stats.total) * 100 : 0;
-  const isProcessing = stats.processing > 0 || stats.pending > 0 || stats.retrying > 0;
-  const canProcessQueue = stats.pending > 0 || stats.retrying > 0 || stats.processing > 0;
+  const isProcessing = hasRemainingQueueWork(stats);
+  const canProcessQueue = isProcessing;
 
   return (
     <Card>
@@ -217,7 +272,7 @@ export default function QueueMonitor({
             <div>
               <p className="font-medium">Procesamiento en curso</p>
               <p className="text-xs opacity-80 mt-0.5">
-                Los mensajes se están enviando con rate limiting automático
+                Los mensajes se envían automáticamente con rate limiting; la cola se continúa sola
               </p>
             </div>
           </div>
@@ -250,4 +305,3 @@ export default function QueueMonitor({
     </Card>
   );
 }
-

@@ -62,7 +62,7 @@ describe("QueueMonitor edge integration", () => {
       error: null,
     });
 
-    render(<QueueMonitor jobId="job-123" autoRefresh={false} />);
+    render(<QueueMonitor jobId="job-123" autoRefresh={false} autoProcess={false} />);
 
     const processButton = await screen.findByRole("button", { name: /procesar cola/i });
     expect(processButton).toBeEnabled();
@@ -86,7 +86,7 @@ describe("QueueMonitor edge integration", () => {
       error: null,
     });
 
-    render(<QueueMonitor jobId="job-456" autoRefresh={false} />);
+    render(<QueueMonitor jobId="job-456" autoRefresh={false} autoProcess={false} />);
 
     const processButton = await screen.findByRole("button", { name: /procesar cola/i });
     fireEvent.click(processButton);
@@ -103,6 +103,48 @@ describe("QueueMonitor edge integration", () => {
     });
 
     expect(toastSuccessMock).toHaveBeenCalled();
+  });
+
+  it("auto-procesa en silencio cuando hay pendientes y la cola está idle", async () => {
+    rpcMock.mockResolvedValue({
+      data: {
+        pending: 3,
+        processing: 0,
+        sent: 0,
+        failed: 0,
+        retrying: 0,
+        total: 3,
+      },
+      error: null,
+    });
+
+    invokeMock.mockResolvedValue({
+      data: { message: "ok", continuationScheduled: true },
+      error: null,
+    });
+
+    render(
+      <QueueMonitor
+        jobId="job-auto"
+        autoRefresh={false}
+        autoProcess
+        autoProcessInitialDelay={50}
+        autoProcessInterval={60_000}
+      />
+    );
+
+    await screen.findByRole("button", { name: /procesar cola/i });
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith(
+        "process-message-queue",
+        expect.objectContaining({
+          body: { jobId: "job-auto" },
+        })
+      );
+    });
+
+    expect(toastSuccessMock).not.toHaveBeenCalled();
   });
 
   it("evita doble invocación por doble click rápido en 'Procesar Cola'", async () => {
@@ -126,7 +168,7 @@ describe("QueueMonitor edge integration", () => {
         })
     );
 
-    render(<QueueMonitor jobId="job-race" autoRefresh={false} />);
+    render(<QueueMonitor jobId="job-race" autoRefresh={false} autoProcess={false} />);
 
     const processButton = await screen.findByRole("button", { name: /procesar cola/i });
 

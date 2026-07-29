@@ -41,6 +41,8 @@ functions/
 - ✅ Rate limiting respetando límites de WhatsApp
 - ✅ Procesamiento por lotes
 - ✅ Reintentos automáticos con backoff exponencial
+- ✅ Continuación automática (self-chain) mientras quede trabajo
+- ✅ Recuperación de mensajes atascados en PROCESSING
 - ✅ Circuit breaker para protección
 - ✅ Actualización de estadísticas en tiempo real
 
@@ -68,6 +70,9 @@ WA_TEMPLATE_NAME=shipment_notification
 WA_TEMPLATE_LANG=es_CO
 WA_GRAPH_VERSION=v19.0
 SENDER_NAME="Import Corporal Medical"
+PROCESS_LOOP_MAX_RUNTIME_MS=25000
+PROCESS_CONTINUE_MAX_DEPTH=50
+PROCESSING_STALE_MS=300000
 
 # SMTP Hostinger (guardar siempre como secretos de Supabase)
 SMTP_HOST=smtp.hostinger.com

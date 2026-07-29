@@ -13,6 +13,7 @@ import {
   markJobAsFailedEnqueue,
   upsertQueueWithSchemaFallback,
 } from "../_shared/enqueue-flow-utils.ts";
+import { triggerProcessQueueContinuation } from "../_shared/queue-continuation-utils.ts";
 
 interface EnqueueRequest {
   jobId: string;
@@ -140,53 +141,31 @@ serve(async (req) => {
       .update({ status: "QUEUED" })
       .eq("id", jobId);
 
-    // If autoProcess is true, trigger processing
+    // If autoProcess is true, kick off processing without waiting for the full drain.
+    // process-message-queue self-chains while work remains.
     let processResult = null;
     let processTriggerError: string | null = null;
+    let processTriggerScheduled = false;
     if (autoProcess) {
-      let triggerTimeoutId: number | undefined;
-      try {
-        const triggerTimeoutMs = Number(Deno.env.get("AUTO_PROCESS_TRIGGER_TIMEOUT_MS") || "3500");
-        const controller = new AbortController();
-        triggerTimeoutId = setTimeout(() => controller.abort(), triggerTimeoutMs);
-        const userAuthorization = req.headers.get("authorization");
-        const internalApiKey = Deno.env.get("API_KEY");
+      const userAuthorization = req.headers.get("authorization");
+      const internalApiKey = Deno.env.get("API_KEY");
 
-        if (!userAuthorization || !internalApiKey) {
-          processTriggerError = "No se pudo iniciar el envío automático por credenciales internas faltantes. Use 'Procesar cola' en el detalle del envío.";
-        } else {
-          const processResponse = await fetch(
-            `${supabaseUrl}/functions/v1/process-message-queue`,
-            {
-              method: "POST",
-              headers: {
-                Authorization: userAuthorization,
-                "X-API-Key": internalApiKey,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ jobId }),
-              signal: controller.signal,
-            }
-          );
-
-          if (processResponse.ok) {
-            processResult = await processResponse.json().catch(() => null);
-          } else {
-            const errBody = await processResponse.json().catch(() => ({}));
-            processTriggerError = errBody?.message || errBody?.error || "Error al iniciar el procesamiento";
-          }
-        }
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          // Trigger request took too long; don't block enqueue response.
-          processTriggerError = "El procesamiento automático tardó en responder. Use 'Procesar cola' en el detalle del envío.";
-        } else {
-          console.error("Failed to trigger auto-processing:", error);
-          processTriggerError = "No se pudo iniciar el envío automático. Use 'Procesar cola' en el detalle del envío.";
-        }
-      } finally {
-        if (triggerTimeoutId) {
-          clearTimeout(triggerTimeoutId);
+      if (!userAuthorization || !internalApiKey) {
+        processTriggerError =
+          "No se pudo iniciar el envío automático por credenciales internas faltantes. Use 'Procesar cola' en el detalle del envío.";
+      } else {
+        const triggerResult = triggerProcessQueueContinuation({
+          supabaseUrl,
+          authorization: userAuthorization,
+          apiKey: internalApiKey,
+          jobId,
+          continueDepth: 0,
+          delayMs: 0,
+        });
+        processTriggerScheduled = triggerResult.scheduled;
+        if (!triggerResult.scheduled) {
+          processTriggerError =
+            "No se pudo iniciar el envío automático. Use 'Procesar cola' en el detalle del envío.";
         }
       }
     }
@@ -202,6 +181,7 @@ serve(async (req) => {
         status: autoProcess ? "processing" : "queued",
         processResult,
         processTriggerError,
+        processTriggerScheduled,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
